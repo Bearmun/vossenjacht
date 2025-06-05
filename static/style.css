@@ -1,0 +1,71 @@
+body {
+    font-family: sans-serif;
+    margin: 20px;
+    background-color: #f4f4f4;
+    color: #333;
+}
+
+h1, h2 {
+    color: #333;
+}
+
+form {
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+label {
+    margin-top: 10px;
+    display: block;
+}
+
+input[type="text"],
+input[type="number"],
+input[type="time"],
+input[type="submit"] {
+    padding: 8px;
+    margin-top: 5px;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+    width: calc(100% - 18px); /* Adjust width considering padding and border */
+}
+
+input[type="submit"] {
+    background-color: #5cb85c;
+    color: white;
+    cursor: pointer;
+    border: none;
+}
+
+input[type="submit"]:hover {
+    background-color: #4cae4c;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    background-color: #fff;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+th, td {
+    padding: 10px;
+    border: 1px solid #ddd;
+    text-align: left;
+}
+
+th {
+    background-color: #e7e7e7;
+}
+
+a {
+    color: #007bff;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}

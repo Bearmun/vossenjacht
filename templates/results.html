@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fox Hunt Results</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <h1>Fox Hunt Results</h1>
+    {% if entries %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Start KM</th>
+                    <th>End KM</th>
+                    <th>Driven KM</th>
+                    <th>Arrival Time Last Fox</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in entries %}
+                <tr>
+                    <td>{{ entry.name }}</td>
+                    <td>{{ entry.start_km }}</td>
+                    <td>{{ entry.end_km }}</td>
+                    <td>{{ entry.calculated_km }}</td>
+                    <td>{{ entry.arrival_time_last_fox }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No entries submitted yet.</p>
+    {% endif %}
+    <h2>Total Kilometers Driven by All: {{ total_kilometers_all_participants }} km</h2>
+    <br>
+    <a href="/input">Add New Entry</a>
+</body>
+</html>
