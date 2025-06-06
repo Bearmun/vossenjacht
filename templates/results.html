@@ -28,7 +28,7 @@
                     <td>{{ entry.end_km }}</td>
                     <td>{{ entry.calculated_km }}</td>
                     <td>{{ entry.arrival_time_last_fox }}</td>
-                        <td>{{ entry.get('duration_minutes', 'N/A') }}</td>
+                        <td>{{ entry['duration_minutes'] }}</td>
                 </tr>
                 {% endfor %}
             </tbody>

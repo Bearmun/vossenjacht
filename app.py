@@ -1,14 +1,68 @@
-from flask import Flask, render_template, request, redirect, url_for
+import sqlite3
+import click
+from flask import Flask, render_template, request, redirect, url_for, g, current_app
 from datetime import datetime
 
+# DATABASE = 'foxhunt.db' # Replaced by config
 app = Flask(__name__)
+# Ensure MAX_ODOMETER_READING is in app.config if not set by tests
+app.config.setdefault('MAX_ODOMETER_READING', 1000.0)
+app.config.setdefault('DATABASE_FILENAME', 'foxhunt.db') # Default DB filename
 
-from flask import current_app # Import current_app
+def get_db():
+    """Connect to the application's configured database. The connection
+    is unique for each request and will be reused if this is called
+    again.
+    """
+    if 'db' not in g:
+        db_path = current_app.config.get('DATABASE', current_app.config['DATABASE_FILENAME'])
+        g.db = sqlite3.connect(
+            db_path,
+            detect_types=sqlite3.PARSE_DECLTYPES
+        )
+        g.db.row_factory = sqlite3.Row
+    return g.db
 
-# Global list to store hunt entries
-hunt_entries = []
+def close_db(e=None):
+    """If this request connected to the database, close the
+    connection.
+    """
+    db = g.pop('db', None)
+    if db is not None:
+        db.close()
 
-# MAX_ODOMETER_READING = 1000.0 # Will be accessed via app.config
+def init_db():
+    """Clear existing data and create new tables."""
+    db = get_db()
+    # For simplicity, schema is here. Could also execute a .sql file.
+    db.executescript('''
+        DROP TABLE IF EXISTS entries;
+        CREATE TABLE entries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            start_km REAL NOT NULL,
+            end_km REAL NOT NULL,
+            arrival_time_last_fox TEXT NOT NULL,
+            calculated_km REAL NOT NULL,
+            duration_minutes INTEGER NOT NULL
+        );
+    ''')
+    db.commit()
+
+@click.command('init-db')
+def init_db_command():
+    """Clear existing data and create new tables."""
+    init_db()
+    click.echo('Initialized the database.')
+
+def init_app(flask_app):
+    """Register database functions with the Flask app. This is called by
+    the application factory.
+    """
+    flask_app.teardown_appcontext(close_db)
+    flask_app.cli.add_command(init_db_command)
+
+init_app(app) # Register with the current app instance
 
 @app.route('/')
 def index():
@@ -24,56 +78,39 @@ def add_entry():
         name = request.form['name']
         start_km = float(request.form['start_km'])
         end_km = float(request.form['end_km'])
-        arrival_time_str = request.form['arrival_time_last_fox'] # HH:MM format
+        arrival_time_str = request.form['arrival_time_last_fox']
 
-        actual_end_km = end_km
         max_odom_reading = current_app.config.get('MAX_ODOMETER_READING', 1000.0)
-        if end_km < start_km: # Odometer rollover detected
+        actual_end_km = end_km
+        if end_km < start_km: # Odometer rollover
             actual_end_km += max_odom_reading
 
         calculated_km = round(actual_end_km - start_km, 1)
 
-        # Calculate duration from 12:00 PM
+        if calculated_km < 0:
+            print(f"Warning: Negative calculated_km for {name}. Start: {start_km}, End: {end_km}. Adjusted End: {actual_end_km}")
+            return redirect(url_for('input_form'))
+
         try:
             arrival_dt = datetime.strptime(arrival_time_str, '%H:%M')
             start_dt = datetime.strptime('12:00', '%H:%M')
-
             duration_delta = arrival_dt - start_dt
             duration_minutes = int(duration_delta.total_seconds() / 60)
-
-            # Assuming arrival times are always >= 12:00 on the same day.
-            # Negative duration implies arrival before 12:00, which should ideally be handled
-            # or prevented at input if the hunt strictly starts at 12:00.
-            # For now, we allow it as calculated.
-            # if duration_minutes < 0:
-            #     pass # Or handle as an error, e.g. return redirect(url_for('input_form'))
-
         except ValueError:
-            # Invalid time format
-            return redirect(url_for('input_form')) # Redirect, ideally with error
+            print(f"Error: Invalid time format for {name}. Time: {arrival_time_str}")
+            return redirect(url_for('input_form'))
 
-        # Ensure calculated_km is not negative if MAX_ODOMETER_READING is too small
-        # or start_km was already after a rollover and end_km is small.
-        # This simple model assumes at most one rollover.
-        if calculated_km < 0:
-            # This might indicate a data entry error or more than one rollover.
-            # For now, redirect to input. A more robust solution might log an error
-            # or pass a specific error message to the user.
-            print(f"Warning: Negative calculated_km for {name}. Start: {start_km}, End: {end_km}. Adjusted End: {actual_end_km}")
-            return redirect(url_for('input_form')) # Or an error page/message
-
-        entry = {
-            'name': name,
-            'start_km': start_km,
-            'end_km': end_km, # Store original end_km
-            'arrival_time_last_fox': arrival_time_str, # Store as string
-            'calculated_km': calculated_km,
-            'duration_minutes': duration_minutes
-        }
-        hunt_entries.append(entry)
+        db = get_db()
+        db.execute(
+            'INSERT INTO entries (name, start_km, end_km, arrival_time_last_fox, calculated_km, duration_minutes)'
+            ' VALUES (?, ?, ?, ?, ?, ?)',
+            (name, start_km, end_km, arrival_time_str, calculated_km, duration_minutes)
+        )
+        db.commit()
         return redirect(url_for('results'))
-    except ValueError:
-        # Ideally, pass an error message to the template
+
+    except ValueError: # For float conversion errors
+        print("Error: Non-numeric input for kilometer fields.")
         return redirect(url_for('input_form'))
     except Exception as e:
         print(f"An error occurred in add_entry: {e}")
@@ -81,12 +118,26 @@ def add_entry():
 
 @app.route('/results')
 def results():
+    db = get_db()
+    entries_rows = db.execute('SELECT * FROM entries').fetchall()
+
+    # Convert Row objects to behave more like dictionaries for sorting compatibility if needed,
+    # though direct access x['key'] works with sqlite3.Row.
+    # No explicit conversion needed if sqlite3.Row is used directly.
+
     # Sort entries: primary key calculated_km (ascending), secondary key duration_minutes (ascending)
-    sorted_entries = sorted(hunt_entries, key=lambda x: (x['calculated_km'], x.get('duration_minutes', float('inf'))))
+    # sqlite3.Row objects are dict-like, so x.get should not be necessary if columns always exist.
+    # Using x['duration_minutes'] directly if we are sure the column is there.
+    # For robustness with potentially missing data (not expected with new schema), .get is safer.
+    # However, sqlite3.Row does not have .get(). Direct access is fine due to schema.
+    sorted_entries = sorted(entries_rows, key=lambda x: (x['calculated_km'], x['duration_minutes']))
 
     total_kilometers_all = sum(entry['calculated_km'] for entry in sorted_entries)
 
     return render_template('results.html', entries=sorted_entries, total_kilometers_all_participants=round(total_kilometers_all, 1))
 
 if __name__ == '__main__':
+    # Note: app.run() is not called here if using `flask run` command.
+    # For direct `python app.py` execution, it would be needed.
+    # The init_app call handles CLI setup.
     app.run(debug=True, host='0.0.0.0', port=8080)
