@@ -132,9 +132,27 @@ def results():
     # However, sqlite3.Row does not have .get(). Direct access is fine due to schema.
     sorted_entries = sorted(entries_rows, key=lambda x: (x['calculated_km'], x['duration_minutes']))
 
-    total_kilometers_all = sum(entry['calculated_km'] for entry in sorted_entries)
+    # Add rank to entries - Standard Dense Ranking
+    ranked_entries_with_dense_rank = []
+    last_score = None
+    current_dense_rank = 0
+    if sorted_entries: # Ensure there are entries before trying to rank
+        for entry in sorted_entries:
+            # Make sure duration_minutes is handled if it could be None, though schema says NOT NULL
+            # Using x.get('duration_minutes', float('inf'))) was for old list-based data.
+            # With sqlite3.Row and NOT NULL, direct access x['duration_minutes'] is fine.
+            current_score = (entry['calculated_km'], entry['duration_minutes'])
+            if current_score != last_score:
+                current_dense_rank += 1 # Increment rank for new distinct score
+                last_score = current_score
 
-    return render_template('results.html', entries=sorted_entries, total_kilometers_all_participants=round(total_kilometers_all, 1))
+            mutable_entry = dict(entry) # Convert sqlite3.Row to a mutable dict to add 'rank'
+            mutable_entry['rank'] = current_dense_rank
+            ranked_entries_with_dense_rank.append(mutable_entry)
+
+    total_kilometers_all = sum(entry['calculated_km'] for entry in ranked_entries_with_dense_rank)
+
+    return render_template('results.html', entries=ranked_entries_with_dense_rank, total_kilometers_all_participants=round(total_kilometers_all, 1))
 
 if __name__ == '__main__':
     # Note: app.run() is not called here if using `flask run` command.

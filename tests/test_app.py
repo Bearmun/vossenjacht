@@ -55,9 +55,10 @@ class FoxHuntTrackerDBTests(unittest.TestCase): # Renamed class
             'name': 'Team Alfa DB', 'start_km': '100.0', 'end_km': '150.5', 'arrival_time_last_fox': '13:00'
         }, follow_redirects=True)
         self.assertEqual(response.status_code, 200)
+        self.assertIn(b'<title>Vreetvos resultaten</title>', response.data)
 
         # Check UI
-        self.assertIn(b'Vossenjacht Resultaten', response.data)
+        self.assertIn(b'Vreetvos resultaten', response.data) # Check h1
         self.assertIn(b'Team Alfa DB', response.data)
         self.assertIn(b'50.5', response.data) # calculated_km
         self.assertIn(b'60', response.data)   # duration_minutes
@@ -87,6 +88,7 @@ class FoxHuntTrackerDBTests(unittest.TestCase): # Renamed class
 
         response = self.client.get('/results')
         self.assertEqual(response.status_code, 200)
+        self.assertIn(b'<title>Vreetvos resultaten</title>', response.data)
         data_str = response.data.decode('utf-8')
 
         hunter_b_pos = data_str.find('Hunter B')
@@ -108,10 +110,14 @@ class FoxHuntTrackerDBTests(unittest.TestCase): # Renamed class
         self.client.post('/add_entry', data={'name': 'Auto 1', 'start_km': '0.0', 'end_km': '10.5', 'arrival_time_last_fox': '12:10'})
         self.client.post('/add_entry', data={'name': 'Auto 2', 'start_km': '100.0', 'end_km': '120.3', 'arrival_time_last_fox': '12:20'})
         response = self.client.get('/results')
+        self.assertEqual(response.status_code, 200) # Added for consistency before title check
+        self.assertIn(b'<title>Vreetvos resultaten</title>', response.data)
         self.assertIn(b'Totaal Aantal Gereden Kilometers (iedereen): 30.8 km', response.data)
 
     def test_08_empty_results_page_dutch_ui(self):
         response = self.client.get('/results')
+        self.assertEqual(response.status_code, 200) # Added for consistency before title check
+        self.assertIn(b'<title>Vreetvos resultaten</title>', response.data)
         self.assertIn(b'Nog geen ritten ingevoerd.', response.data)
         self.assertIn(b'Totaal Aantal Gereden Kilometers (iedereen): 0 km', response.data)
         db = get_db() # Check DB is indeed empty
@@ -129,6 +135,8 @@ class FoxHuntTrackerDBTests(unittest.TestCase): # Renamed class
         self.assertEqual(entries_count, 3)
 
         response = self.client.get('/results')
+        self.assertEqual(response.status_code, 200) # Added for consistency before title check
+        self.assertIn(b'<title>Vreetvos resultaten</title>', response.data)
         self.assertIn(b'Rijder X', response.data)
         self.assertIn(b'120', response.data) # duration for X
         self.assertIn(b'Rijder Y', response.data)
@@ -192,6 +200,67 @@ class FoxHuntTrackerDBTests(unittest.TestCase): # Renamed class
 
         early_entry = db.execute('SELECT duration_minutes FROM entries WHERE name = ?', ('Team Early',)).fetchone()
         self.assertEqual(early_entry['duration_minutes'], -60)
+
+    def test_14_rank_highlighting(self):
+        """Test rank-based CSS class highlighting for top 3 entries."""
+        # Entry data: (name, km_start, km_end, time_str, expected_km, expected_duration)
+        # Rank 1 (Gold)
+        self.client.post('/add_entry', data={'name': 'Gold A', 'start_km': '0', 'end_km': '10', 'arrival_time_last_fox': '13:00'}) # 10km, 60min
+        self.client.post('/add_entry', data={'name': 'Gold B', 'start_km': '100', 'end_km': '110', 'arrival_time_last_fox': '13:00'}) # 10km, 60min
+        # Rank 2 (Silver)
+        self.client.post('/add_entry', data={'name': 'Silver C', 'start_km': '0', 'end_km': '20', 'arrival_time_last_fox': '13:10'}) # 20km, 70min
+        # Rank 3 (Bronze)
+        self.client.post('/add_entry', data={'name': 'Bronze D', 'start_km': '0', 'end_km': '30', 'arrival_time_last_fox': '13:20'}) # 30km, 80min
+        self.client.post('/add_entry', data={'name': 'Bronze E', 'start_km': '50', 'end_km': '80', 'arrival_time_last_fox': '13:20'}) # 30km, 80min
+        # Rank 4 (No highlight)
+        self.client.post('/add_entry', data={'name': 'NoHighlight F', 'start_km': '0', 'end_km': '40', 'arrival_time_last_fox': '13:30'}) # 40km, 90min
+
+        response = self.client.get('/results')
+        self.assertEqual(response.status_code, 200)
+        html_content = response.data.decode('utf-8')
+
+        # Check for title - Vreetvos resultaten
+        self.assertIn("<title>Vreetvos resultaten</title>", html_content)
+        import re
+
+        def get_row_html_for_entry(entry_name, full_html):
+            # Captures the whole <tr> element containing the entry_name
+            # Ensures that <td>entry_name</td> is part of the row content.
+            # It looks for the opening <tr>, then any characters non-greedily (.*?),
+            # as long as it's not another <tr> or </tr> too soon,
+            # then the specific <td>entry_name</td>, then any characters non-greedily (.*?),
+            # and finally the closing </tr>.
+            # (?:(?!</?tr>).)* matches anything that's not an opening or closing tr tag
+            pattern = f'(<tr[^>]*>((?:(?!</?tr>).)*?)<td>{re.escape(entry_name)}</td>((?:(?!</?tr>).)*?)</tr>)'
+            match = re.search(pattern, full_html, re.DOTALL)
+            if match:
+                return match.group(1) # Return the whole <tr>...</tr>
+            self.fail(f"Row for entry '{entry_name}' not found in HTML content.") # Fail if row not found
+
+        # Check Gold A and Gold B (Rank 1)
+        row_gold_a = get_row_html_for_entry('Gold A', html_content)
+        self.assertIn('class="rank-gold"', row_gold_a)
+        row_gold_b = get_row_html_for_entry('Gold B', html_content)
+        self.assertIn('class="rank-gold"', row_gold_b)
+
+        # Check Silver C (Rank 2)
+        row_silver_c = get_row_html_for_entry('Silver C', html_content)
+        self.assertIn('class="rank-silver"', row_silver_c)
+
+        # Check Bronze D and Bronze E (Rank 3)
+        row_bronze_d = get_row_html_for_entry('Bronze D', html_content)
+        self.assertIn('class="rank-bronze"', row_bronze_d)
+        row_bronze_e = get_row_html_for_entry('Bronze E', html_content)
+        self.assertIn('class="rank-bronze"', row_bronze_e)
+
+        # Check NoHighlight F (Rank 4)
+        row_no_highlight_f = get_row_html_for_entry('NoHighlight F', html_content)
+        # Rank 4 should have class="" because of how the Jinja template is structured
+        self.assertIn('class=""', row_no_highlight_f)
+        self.assertNotIn('rank-gold', row_no_highlight_f)
+        self.assertNotIn('rank-silver', row_no_highlight_f)
+        self.assertNotIn('rank-bronze', row_no_highlight_f)
+
 
 if __name__ == '__main__':
     unittest.main()

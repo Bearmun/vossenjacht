@@ -3,11 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vossenjacht Resultaten</title>
+    <title>Vreetvos resultaten</title> <!-- Changed -->
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <h1>Vossenjacht Resultaten</h1>
+    <h1>Vreetvos resultaten</h1> <!-- Changed -->
+    {% if db_error %}
+        <p style="color: red;">Database Fout: {{ db_error }}</p>
+    {% endif %}
     {% if entries %}
         <table>
             <thead>
@@ -22,13 +25,13 @@
             </thead>
             <tbody>
                 {% for entry in entries %}
-                <tr>
+                <tr class="{% if entry.rank == 1 %}rank-gold{% elif entry.rank == 2 %}rank-silver{% elif entry.rank == 3 %}rank-bronze{% endif %}">
                     <td>{{ entry.name }}</td>
                     <td>{{ entry.start_km }}</td>
                     <td>{{ entry.end_km }}</td>
                     <td>{{ entry.calculated_km }}</td>
                     <td>{{ entry.arrival_time_last_fox }}</td>
-                        <td>{{ entry['duration_minutes'] }}</td>
+                    <td>{{ entry['duration_minutes'] if entry['duration_minutes'] is not none else 'N/A' }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
