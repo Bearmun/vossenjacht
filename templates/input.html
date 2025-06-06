@@ -1,29 +1,29 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="nl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Add Fox Hunt Entry</title>
+    <title>Vossenjacht Invoer</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <h1>Add New Fox Hunt Entry</h1>
+    <h1>Nieuwe Vossenjacht Rit Invoeren</h1>
     <form action="/add_entry" method="post">
-        <label for="name">Name:</label><br>
+        <label for="name">Naam:</label><br>
         <input type="text" id="name" name="name" required><br><br>
 
-        <label for="start_km">Start Kilometer Reading:</label><br>
+        <label for="start_km">Begin Kilometerstand:</label><br>
         <input type="number" step="0.1" id="start_km" name="start_km" required><br><br>
 
-        <label for="end_km">End Kilometer Reading:</label><br>
+        <label for="end_km">Eind Kilometerstand:</label><br>
         <input type="number" step="0.1" id="end_km" name="end_km" required><br><br>
 
-        <label for="arrival_time_last_fox">Arrival Time of Last Fox (HH:MM):</label><br>
+        <label for="arrival_time_last_fox">Aankomsttijd Laatste Vos (UU:MM):</label><br>
         <input type="time" id="arrival_time_last_fox" name="arrival_time_last_fox" required><br><br>
 
-        <input type="submit" value="Submit Entry">
+        <input type="submit" value="Rit Opslaan">
     </form>
     <br>
-    <a href="/results">View Results</a>
+    <a href="/results">Bekijk Resultaten</a>
 </body>
 </html>
