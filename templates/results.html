@@ -15,23 +15,25 @@
         <table>
             <thead>
                 <tr>
+                    <th>Plaats</th> <!-- New First Column -->
                     <th>Naam</th>
+                    <th>Gereden KM</th>
+                    <th>Duur (minuten)</th>
                     <th>Begin KM</th>
                     <th>Eind KM</th>
-                    <th>Gereden KM</th>
                     <th>Aankomsttijd Laatste Vos</th>
-                        <th>Duur (minuten)</th>
                 </tr>
             </thead>
             <tbody>
                 {% for entry in entries %}
                 <tr class="{% if entry.rank == 1 %}rank-gold{% elif entry.rank == 2 %}rank-silver{% elif entry.rank == 3 %}rank-bronze{% endif %}">
+                    <td>{{ entry['rank'] }}</td> <!-- New First Cell for Rank -->
                     <td>{{ entry.name }}</td>
+                    <td>{{ entry['calculated_km'] }}</td>
+                    <td>{{ entry['duration_minutes'] if entry['duration_minutes'] is not none else 'N/A' }}</td>
                     <td>{{ entry.start_km }}</td>
                     <td>{{ entry.end_km }}</td>
-                    <td>{{ entry.calculated_km }}</td>
                     <td>{{ entry.arrival_time_last_fox }}</td>
-                    <td>{{ entry['duration_minutes'] if entry['duration_minutes'] is not none else 'N/A' }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -41,6 +43,11 @@
     {% endif %}
     <h2>Totaal Aantal Gereden Kilometers (iedereen): {{ total_kilometers_all_participants }} km</h2>
     <br>
-    <a href="/input">Nieuwe Rit Invoeren</a>
+    {% if session.logged_in %}
+        <a href="{{ url_for('logout') }}">Uitloggen</a> |
+        <a href="{{ url_for('input_form') }}">Nieuwe Rit Invoeren</a>
+    {% else %}
+        <a href="{{ url_for('login') }}">Inloggen om Rit In te Voeren</a>
+    {% endif %}
 </body>
 </html>

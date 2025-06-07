@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Vreetvos Beheer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <h1>Inloggen voor Rit Invoer</h1>
+    {% if error %}
+        <p style="color:red;">{{ error }}</p>
+    {% endif %}
+    <form method="post" action="{{ url_for('login') }}">
+        <label for="password">Wachtwoord:</label><br>
+        <input type="password" id="password" name="password" required><br><br>
+        <input type="submit" value="Inloggen">
+    </form>
+    <br>
+    <p><a href="{{ url_for('results') }}">Terug naar Resultaten</a></p>
+</body>
+</html>

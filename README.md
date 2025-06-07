@@ -15,6 +15,60 @@ The application is primarily in Dutch.
 *   Results sorted by kilometers driven (ascending), then by duration (ascending).
 *   User interface in Dutch.
 *   Persistent data storage using SQLite (`foxhunt.db`).
+*   Basic password protection for data entry forms.
+
+## Configuration
+
+The application can be configured using environment variables.
+
+*   **`FLASK_SECRET_KEY`**:
+    *   **Purpose**: A secret key used by Flask to sign session cookies for security. This is crucial for the login functionality.
+    *   **Default**: A randomly generated value (not suitable for production if instances are restarted often, as sessions would invalidate).
+    *   **Recommendation**: Set a strong, persistent random string in your production environment.
+    *   Example: `export FLASK_SECRET_KEY='your_very_strong_random_secret_string'`
+
+*   **`VREETVOS_ADMIN_PASSWORD`**:
+    *   **Purpose**: The password used to log in to access the data entry forms.
+    *   **Default**: `vreetvos_admin` (Change this for any real deployment!)
+    *   **Recommendation**: Set a strong password in your production environment.
+    *   Example: `export VREETVOS_ADMIN_PASSWORD='your_secure_admin_password'`
+
+*   **`DATABASE_PATH`**:
+    *   **Purpose**: Specifies the full path to the SQLite database file within the container.
+    *   **Default (in Dockerfile)**: `/data/foxhunt.db`
+    *   **Default (local `app.py`)**: `foxhunt.db`
+    *   **Note**: When running with Docker/Docker Compose, this path inside the container is mapped to a host directory or Docker volume for persistence.
+
+**Setting Environment Variables for Docker/Docker Compose:**
+
+*   **With `docker run`:**
+    Use the `-e` flag for each variable:
+    ```sh
+    docker run -d -p 8080:8080 \
+      -e FLASK_SECRET_KEY='your_very_strong_random_secret_string' \
+      -e VREETVOS_ADMIN_PASSWORD='your_secure_admin_password' \
+      -v $(pwd)/vreetvos_data:/data \
+      --name vreetvos-container ghcr.io/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME:latest
+    ```
+
+*   **With `docker-compose.yml`:**
+    You can create an `.env` file in the same directory as your `docker-compose.yml` file with the following content:
+    ```env
+    FLASK_SECRET_KEY=your_very_strong_random_secret_string
+    VREETVOS_ADMIN_PASSWORD=your_secure_admin_password
+    # DATABASE_PATH is already set in the Dockerfile ENV, so not typically needed here
+    # unless you want to override the default for a specific compose setup.
+    ```
+    Docker Compose will automatically pick up variables from an `.env` file.
+    Alternatively, you can add an `environment` section directly in `docker-compose.yml` (less secure for secrets if committed):
+    ```yaml
+    services:
+      vreetvos-app:
+        # ... other config ...
+        environment:
+          - FLASK_SECRET_KEY=your_very_strong_random_secret_string
+          - VREETVOS_ADMIN_PASSWORD=your_secure_admin_password
+    ```
 
 ## Setup and Running
 
