@@ -49,12 +49,15 @@ table {
     margin-top: 20px;
     background-color: #fff;
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    table-layout: fixed; /* Add this for more predictable column widths */
 }
 
 th, td {
     padding: 10px;
     border: 1px solid #ddd;
     text-align: left;
+    overflow-wrap: break-word; /* Add this for word wrapping */
+    word-break: break-word; /* Add this for better CJK wrapping and fallback */
 }
 
 th {
@@ -68,6 +71,37 @@ a {
 
 a:hover {
     text-decoration: underline;
+}
+
+/* Rank highlighting */
+.rank-gold {
+    background-color: #ffd700; /* Gold */
+}
+.rank-silver {
+    background-color: #c0c0c0; /* Silver */
+}
+.rank-bronze {
+    background-color: #cd7f32; /* Bronze */
+}
+
+/* Ensure text is readable on new backgrounds */
+.rank-gold td, .rank-silver td, .rank-bronze td {
+    color: #000000; /* Black text for better contrast, adjust if needed */
+}
+
+@media (max-width: 600px) { /* Adjust breakpoint as needed for mobile portrait */
+    th, td {
+        padding: 6px; /* Reduce padding */
+        font-size: 0.9em; /* Slightly smaller font */
+    }
+
+    /* Optional: If we want to give specific columns less priority on mobile */
+    /* You can add classes to th/td in HTML and hide them:
+    .mobile-hide {
+        display: none;
+    }
+    */
+    /* For now, just adjusting padding and font size. */
 }
 
 /* Rank highlighting */
