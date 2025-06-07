@@ -10,8 +10,19 @@ services:
       - "8080:8080"
     volumes:
       - vreetvos_db_data:/data
-    # Environment variables are set in the Dockerfile.
-    # Restart policy can be useful for production-like behavior
+    environment:
+      # Timezone (matches Dockerfile default, can be overridden here or by .env file)
+      - TZ=Europe/Amsterdam
+      # Flask Secret Key for session management
+      # IMPORTANT: Change this to a strong, unique random string for production!
+      # Best practice is to use an .env file for this.
+      - FLASK_SECRET_KEY=your_very_strong_and_unique_secret_key_here_please_change_me
+      # Admin password for accessing the input form
+      # IMPORTANT: Change this for production!
+      # Best practice is to use an .env file for this.
+      - VREETVOS_ADMIN_PASSWORD=vreetvos_admin
+      # Database path (matches Dockerfile default, can be overridden here or by .env file)
+      - DATABASE_PATH=/data/foxhunt.db
     restart: unless-stopped
 
 volumes:

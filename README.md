@@ -195,8 +195,26 @@ For easier local development and management, a `docker-compose.yml` file is prov
 
 2.  **Configuration (Important!):**
     *   The `docker-compose.yml` file is configured to use an image from GHCR: `image: ghcr.io/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME:latest`.
-    *   **You MUST replace `YOUR_GITHUB_USERNAME` and `YOUR_REPO_NAME` in the `docker-compose.yml` file with your actual GitHub username (or organization) and repository name.**
-    *   Similarly, replace these placeholders in any `docker pull` commands mentioned below.
+        *   **You MUST replace `YOUR_GITHUB_USERNAME` and `YOUR_REPO_NAME` in the `docker-compose.yml` file with your actual GitHub username (or organization) and repository name.**
+        *   Similarly, replace these placeholders in any `docker pull` commands mentioned.
+    *   The `docker-compose.yml` file also includes an `environment:` section that sets default or placeholder values for:
+        *   `TZ: "Europe/Amsterdam"`
+        *   `FLASK_SECRET_KEY: "your_very_strong_and_unique_secret_key_here_please_change_me"`
+        *   `VREETVOS_ADMIN_PASSWORD: "vreetvos_admin"`
+        *   `DATABASE_PATH: "/data/foxhunt.db"`
+    *   **Security Warning:**
+        *   The default values for `FLASK_SECRET_KEY` and `VREETVOS_ADMIN_PASSWORD` in `docker-compose.yml` are **NOT secure** and **MUST be changed** for any real deployment.
+    *   **Recommended Configuration Method (using an `.env` file):**
+        *   For better security, especially for secrets, create a file named `.env` in the same directory as `docker-compose.yml`. Docker Compose automatically loads environment variables from this file.
+        *   **Do NOT commit your `.env` file to version control if it contains real secrets.** Add `.env` to your `.gitignore` file.
+        *   Example `.env` file content:
+            ```env
+            FLASK_SECRET_KEY=a_truly_random_and_strong_secret_key_generated_by_you
+            VREETVOS_ADMIN_PASSWORD=your_chosen_strong_admin_password
+            # You can also override TZ or DATABASE_PATH here if needed, e.g.:
+            # TZ=America/New_York
+            ```
+        *   Values set in the `.env` file will override those defined directly in the `environment:` section of `docker-compose.yml`.
 
 3.  **Pull the Latest Image (Recommended):**
     *   Before starting the services, it's good practice to pull the latest image from GHCR:
