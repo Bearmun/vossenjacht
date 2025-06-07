@@ -32,6 +32,14 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
+    # Set up QEMU for multi-architecture builds (needed for ARM)
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v2
+
+    # Set up Docker Buildx for multi-platform builds
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+
     - name: Extract metadata (tags, labels) for Docker
       id: meta
       uses: docker/metadata-action@v4
@@ -44,12 +52,12 @@ jobs:
           type=sha,format=long,prefix=
           latest
 
-    - name: Build and push Docker image
+    - name: Build and push Docker image (multi-platform)
       uses: docker/build-push-action@v4
       with:
         context: .
         push: true
+        platforms: linux/amd64,linux/arm64 # Build for amd64 and arm64
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
-        # cache-from: type=gha  # Removed
-        # cache-to: type=gha,mode=max # Removed
+        # Caching was removed due to issues with the default driver

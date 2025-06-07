@@ -101,6 +101,7 @@ This project is configured with GitHub Actions to automatically build and push D
 
 *   The images are stored at: `ghcr.io/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME`
     *   **Note:** Replace `YOUR_GITHUB_USERNAME` with your GitHub username (or organization name) and `YOUR_REPO_NAME` with the name of this repository.
+*   **Multi-Arch Support:** The published images are multi-arch, supporting both `linux/amd64` (for standard PCs/servers) and `linux/arm64` (e.g., for Raspberry Pi 4 64-bit and other 64-bit ARM devices). Docker will automatically pull the appropriate image for your system's architecture.
 
 **Pulling the Latest Image:**
 
