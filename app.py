@@ -99,7 +99,10 @@ def index():
 @app.route('/input')
 @login_required # Protect this route
 def input_form():
-    return render_template('input.html')
+    # Get current time formatted as HH:MM for pre-filling the form
+    now = datetime.now()
+    current_time_str = now.strftime('%H:%M')
+    return render_template('input.html', current_time_for_form=current_time_str)
 
 @app.route('/add_entry', methods=['POST'])
 @login_required # Protect this route

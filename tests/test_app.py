@@ -2,6 +2,9 @@ import unittest
 import sys
 import os
 
+import re # Added re
+from datetime import datetime # Ensure datetime is imported
+
 # Add the parent directory to the Python path to allow module imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -324,6 +327,18 @@ class FoxHuntTrackerDBTests(unittest.TestCase):
         response = self.client.get('/input')
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'Nieuwe Vossenjacht Rit Invoeren', response.data)
+
+        # New check for pre-filled time
+        html_content = response.data.decode('utf-8')
+        match = re.search(r'<input type="time" id="arrival_time_last_fox"[^>]*value="(\d{2}:\d{2})"[^>]*>', html_content)
+        self.assertIsNotNone(match, "Arrival time input field with a value attribute was not found or value format is incorrect.")
+        if match:
+            prefilled_time = match.group(1)
+            try:
+                # Validate format by trying to parse it
+                datetime.strptime(prefilled_time, '%H:%M')
+            except ValueError:
+                self.fail(f"Prefilled time '{prefilled_time}' is not in HH:MM format.")
 
     def test_16_auth_add_entry_requires_login(self):
         """Test that POST to /add_entry without login redirects and does not add data."""

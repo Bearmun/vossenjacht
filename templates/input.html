@@ -19,7 +19,7 @@
         <input type="number" step="0.1" id="end_km" name="end_km" required><br><br>
 
         <label for="arrival_time_last_fox">Aankomsttijd Laatste Vos (UU:MM):</label><br>
-        <input type="time" id="arrival_time_last_fox" name="arrival_time_last_fox" required><br><br>
+        <input type="time" id="arrival_time_last_fox" name="arrival_time_last_fox" value="{{ current_time_for_form if current_time_for_form else '' }}" required><br><br>
 
         <input type="submit" value="Rit Opslaan">
     </form>
