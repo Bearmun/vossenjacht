@@ -29,7 +29,9 @@ EXPOSE 8080
 # Ensure the /data directory exists for the database
 RUN mkdir -p /data
 
-# Define the command to run the app
-# The init-db command should be run by the user when setting up the volume first time.
-# Or the app's auto-init will handle it if the DB file doesn't exist at DATABASE_PATH.
-CMD ["flask", "run"]
+# Copy the startup script specifically and make it executable
+COPY startup.sh /app/startup.sh
+RUN chmod +x /app/startup.sh
+
+# Define the command to run the app using the startup script
+CMD ["/app/startup.sh"]
