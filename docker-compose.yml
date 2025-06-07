@@ -1,0 +1,21 @@
+version: '3.8' # Specifies the Docker Compose file format version
+
+services:
+  vreetvos-app:
+    build:
+      context: . # Use the current directory as the build context
+      dockerfile: Dockerfile # Specify the Dockerfile name
+    image: vreetvos-app-local # Optionally name the image built by compose
+    container_name: vreetvos-app-container # Name for the running container
+    ports:
+      - "8080:8080" # Map host port 8080 to container port 8080
+    volumes:
+      - vreetvos_db_data:/data # Mount the named volume 'vreetvos_db_data' to /data in the container
+    # Environment variables are largely set in the Dockerfile.
+    # If you needed to override or add some here, you could use:
+    # environment:
+    #   - FLASK_DEBUG=1 # Example, if you want to enable debug mode via compose
+
+volumes:
+  vreetvos_db_data: # Define the named volume
+    # driver: local # Default driver is local, usually fine.

@@ -122,3 +122,50 @@ Remember to replace the placeholders and adjust the volume path `$(pwd)/vreetvos
 **Using a Specific Version (Commit SHA):**
 
 The workflow also tags images with the long Git commit SHA. You can pull a specific version by replacing `:latest` with the commit SHA if needed. You can find commit SHAs on GitHub in the commit history.
+
+## Running with Docker Compose
+
+For easier local development and management, a `docker-compose.yml` file is provided.
+
+1.  **Prerequisites:**
+    *   Docker installed and running.
+    *   Docker Compose installed (often included with Docker Desktop, or can be installed separately as a plugin or standalone).
+
+2.  **Build and Run the Application:**
+    *   Open your terminal in the project root directory (where `docker-compose.yml` is located).
+    *   Run the following command to build the image (if it doesn't exist or if changes were made to the Dockerfile/app) and start the service(s) in detached mode:
+        `docker-compose up -d --build`
+        *   `--build`: Forces Docker Compose to build the image before starting the containers. Omit this if you want to use a previously built image and just start the container.
+        *   `-d`: Run in detached mode (in the background).
+    *   If you only want to start the services without necessarily rebuilding:
+        `docker-compose up -d`
+
+3.  **Access the Application:**
+    *   Open your web browser and go to `http://localhost:8080`.
+
+4.  **Database Persistence:**
+    *   The `docker-compose.yml` file defines a named volume called `vreetvos_db_data`. This volume is used to store the SQLite database (`foxhunt.db` located at `/data/foxhunt.db` inside the container).
+    *   Your data will persist even if you stop and remove the container, as long as the named volume `vreetvos_db_data` is not explicitly deleted.
+
+5.  **Database Initialization (First Run with New Volume):**
+    *   The application is configured to create the database and table if they don't exist when it starts.
+    *   If you ever need to manually initialize or reset the database within the container managed by Docker Compose:
+        `docker-compose exec vreetvos-app flask init-db`
+        *   `vreetvos-app` is the service name defined in `docker-compose.yml`.
+
+6.  **Viewing Logs:**
+    *   To view the logs from the running application service:
+        `docker-compose logs -f vreetvos-app`
+        *   `-f`: Follow log output.
+
+7.  **Stopping the Application:**
+    *   To stop the services defined in `docker-compose.yml`:
+        `docker-compose down`
+        *   This command stops and removes the containers. Network and volumes are not removed by default.
+    *   To stop and remove the named volume (deleting all data):
+        `docker-compose down -v`
+
+8.  **Rebuilding the Image:**
+    *   If you make changes to the `Dockerfile` or application code that requires a new image:
+        `docker-compose build vreetvos-app`
+    *   Or simply use `docker-compose up -d --build`.
