@@ -39,6 +39,13 @@ The application can be configured using environment variables.
     *   **Default (local `app.py`)**: `foxhunt.db`
     *   **Note**: When running with Docker/Docker Compose, this path inside the container is mapped to a host directory or Docker volume for persistence.
 
+*   **`TZ`**:
+    *   **Purpose**: Sets the timezone for the Docker container and thus for the application running inside it. This affects how current time is determined (e.g., for pre-filling forms).
+    *   **Default (in Dockerfile)**: `Europe/Amsterdam`
+    *   **Recommendation**: If you are in a different timezone, you can override this when running the container.
+    *   Example (in `.env` for Docker Compose): `TZ=America/New_York`
+    *   Example (with `docker run`): `-e TZ="America/New_York"`
+
 **Setting Environment Variables for Docker/Docker Compose:**
 
 *   **With `docker run`:**

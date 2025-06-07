@@ -15,7 +15,7 @@ app.config['VREETVOS_ADMIN_PASSWORD'] = os.environ.get('VREETVOS_ADMIN_PASSWORD'
 # Determine database path: prioritize DATABASE_PATH env var, then default.
 database_actual_path = os.environ.get('DATABASE_PATH', 'foxhunt.db')
 app.config.setdefault('DATABASE_FILENAME', database_actual_path) # Use determined path
-app.config.setdefault('MAX_ODOMETER_READING', 1000.0)
+app.config.setdefault('MAX_ODOMETER_READING', 1000) # Changed to int
 
 
 def get_db():
@@ -115,16 +115,16 @@ def input_form():
 def add_entry():
     try:
         name = request.form['name']
-        start_km = float(request.form['start_km'])
-        end_km = float(request.form['end_km'])
+        start_km = int(float(request.form['start_km'])) # Handle potential float input (e.g. "10.0") then cast to int
+        end_km = int(float(request.form['end_km']))     # Handle potential float input then cast to int
         arrival_time_str = request.form['arrival_time_last_fox']
 
-        max_odom_reading = current_app.config.get('MAX_ODOMETER_READING', 1000.0)
+        max_odom_reading = int(current_app.config.get('MAX_ODOMETER_READING', 1000)) # Ensure int
         actual_end_km = end_km
         if end_km < start_km: # Odometer rollover
             actual_end_km += max_odom_reading
 
-        calculated_km = round(actual_end_km - start_km, 1)
+        calculated_km = int(round(actual_end_km - start_km)) # Calculate as int
 
         if calculated_km < 0:
             print(f"Warning: Negative calculated_km for {name}. Start: {start_km}, End: {end_km}. Adjusted End: {actual_end_km}")
@@ -174,11 +174,15 @@ def results():
 
             mutable_entry = dict(entry)
             mutable_entry['rank'] = current_dense_rank
+            # Ensure km values are integers for the template
+            mutable_entry['start_km'] = int(mutable_entry['start_km'])
+            mutable_entry['end_km'] = int(mutable_entry['end_km'])
+            mutable_entry['calculated_km'] = int(mutable_entry['calculated_km'])
             ranked_entries_with_dense_rank.append(mutable_entry)
 
-    total_kilometers_all = sum(entry['calculated_km'] for entry in ranked_entries_with_dense_rank)
+    total_kilometers_all = int(sum(entry['calculated_km'] for entry in ranked_entries_with_dense_rank))
 
-    return render_template('results.html', entries=ranked_entries_with_dense_rank, total_kilometers_all_participants=round(total_kilometers_all, 1))
+    return render_template('results.html', entries=ranked_entries_with_dense_rank, total_kilometers_all_participants=int(total_kilometers_all))
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8080)

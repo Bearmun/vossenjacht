@@ -18,7 +18,7 @@ class FoxHuntTrackerDBTests(unittest.TestCase):
         app.config.update({
             "TESTING": True,
             "DATABASE": ":memory:",
-            "MAX_ODOMETER_READING": 1000.0,
+            "MAX_ODOMETER_READING": 1000, # Ensure integer
             "FLASK_SECRET_KEY": "test_secret_key_for_sessions", # Essential for session
             "VREETVOS_ADMIN_PASSWORD": "test_password", # For auth tests
             "SERVER_NAME": "localhost.localdomain", # For url_for with next param if needed
@@ -61,7 +61,7 @@ class FoxHuntTrackerDBTests(unittest.TestCase):
         """Test adding a single valid entry, check DB and UI after login."""
         self.login() # Log in first
         response = self.client.post('/add_entry', data={
-            'name': 'Team Alfa DB', 'start_km': '100.0', 'end_km': '150.5', 'arrival_time_last_fox': '13:00'
+            'name': 'Team Alfa DB', 'start_km': '100', 'end_km': '150', 'arrival_time_last_fox': '13:00' # KM as int
         }, follow_redirects=True)
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'<title>Vreetvos resultaten</title>', response.data)
@@ -75,10 +75,10 @@ class FoxHuntTrackerDBTests(unittest.TestCase):
         self.assertIn(b'Vreetvos resultaten', response.data) # Check h1
         self.assertIn(b'Team Alfa DB', response.data)
         self.assertIn(b'<td>1</td>', response.data) # Rank
-        self.assertIn(b'<td>50.5</td>', response.data) # calculated_km
+        self.assertIn(b'<td>50</td>', response.data) # calculated_km (150-100 = 50)
         self.assertIn(b'<td>60</td>', response.data)   # duration_minutes
-        self.assertIn(b'<td>100.0</td>', response.data) # start_km
-        self.assertIn(b'<td>150.5</td>', response.data) # end_km
+        self.assertIn(b'<td>100</td>', response.data) # start_km
+        self.assertIn(b'<td>150</td>', response.data) # end_km
         self.assertIn(b'<td>13:00</td>', response.data) # arrival_time_last_fox
         self.assertIn(b'class="rank-gold"', response.data) # Should be rank 1, so gold
 
@@ -87,25 +87,29 @@ class FoxHuntTrackerDBTests(unittest.TestCase):
         cursor = db.execute('SELECT * FROM entries WHERE name = ?', ('Team Alfa DB',))
         entry_from_db = cursor.fetchone()
         self.assertIsNotNone(entry_from_db)
-        self.assertEqual(entry_from_db['calculated_km'], 50.5)
+        self.assertEqual(entry_from_db['calculated_km'], 50) # Check for int
+        self.assertEqual(entry_from_db['start_km'], 100)    # Check for int
+        self.assertEqual(entry_from_db['end_km'], 150)      # Check for int
         self.assertEqual(entry_from_db['duration_minutes'], 60)
 
     def test_04_kilometer_calculation_direct_check_db(self):
         self.login() # Log in first
         self.client.post('/add_entry', data={
-            'name': 'Team Bravo DB', 'start_km': '200.3', 'end_km': '210.7', 'arrival_time_last_fox': '12:30'
-        }) # calc_km = 10.4, duration = 30
+            'name': 'Team Bravo DB', 'start_km': '200', 'end_km': '210', 'arrival_time_last_fox': '12:30' # KM as int
+        }) # calc_km = 10, duration = 30
         db = get_db()
         entry = db.execute('SELECT * FROM entries WHERE name = ?', ('Team Bravo DB',)).fetchone()
         self.assertIsNotNone(entry)
-        self.assertEqual(entry['calculated_km'], 10.4)
+        self.assertEqual(entry['calculated_km'], 10) # Check for int
+        self.assertEqual(entry['start_km'], 200)   # Check for int
+        self.assertEqual(entry['end_km'], 210)     # Check for int
         self.assertEqual(entry['duration_minutes'], 30)
 
     def test_05_sorting_logic_km_then_duration_check_ui(self):
         self.login() # Log in first
-        self.client.post('/add_entry', data={'name': 'Hunter B', 'start_km': '0.0', 'end_km': '30.0', 'arrival_time_last_fox': '13:30'}) # 30km, 90min
-        self.client.post('/add_entry', data={'name': 'Hunter A', 'start_km': '0.0', 'end_km': '50.0', 'arrival_time_last_fox': '14:00'}) # 50km, 120min
-        self.client.post('/add_entry', data={'name': 'Hunter C', 'start_km': '0.0', 'end_km': '50.0', 'arrival_time_last_fox': '13:00'}) # 50km, 60min
+        self.client.post('/add_entry', data={'name': 'Hunter B', 'start_km': '0', 'end_km': '30', 'arrival_time_last_fox': '13:30'}) # 30km, 90min
+        self.client.post('/add_entry', data={'name': 'Hunter A', 'start_km': '0', 'end_km': '50', 'arrival_time_last_fox': '14:00'}) # 50km, 120min
+        self.client.post('/add_entry', data={'name': 'Hunter C', 'start_km': '0', 'end_km': '50', 'arrival_time_last_fox': '13:00'}) # 50km, 60min
 
         response = self.client.get('/results')
         self.assertEqual(response.status_code, 200)
@@ -134,13 +138,13 @@ class FoxHuntTrackerDBTests(unittest.TestCase):
 
     def test_07_total_kilometers_calculation_dutch_ui(self):
         self.login() # Log in first
-        self.client.post('/add_entry', data={'name': 'Auto 1', 'start_km': '0.0', 'end_km': '10.5', 'arrival_time_last_fox': '12:10'})
-        self.client.post('/add_entry', data={'name': 'Auto 2', 'start_km': '100.0', 'end_km': '120.3', 'arrival_time_last_fox': '12:20'})
+        self.client.post('/add_entry', data={'name': 'Auto 1', 'start_km': '0', 'end_km': '11', 'arrival_time_last_fox': '12:10'}) # 11km
+        self.client.post('/add_entry', data={'name': 'Auto 2', 'start_km': '100', 'end_km': '120', 'arrival_time_last_fox': '12:20'}) # 20km
         response = self.client.get('/results')
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'<title>Vreetvos resultaten</title>', response.data)
         self.assertIn(b'<th>Plaats</th>', response.data) # Check for new column header
-        self.assertIn(b'Totaal Aantal Gereden Kilometers (iedereen): 30.8 km', response.data)
+        self.assertIn(b'Totaal Aantal Gereden Kilometers (iedereen): 31 km', response.data) # 11 + 20 = 31
 
     def test_08_empty_results_page_dutch_ui(self):
         response = self.client.get('/results')
@@ -159,9 +163,9 @@ class FoxHuntTrackerDBTests(unittest.TestCase):
 
     def test_09_add_multiple_entries_dutch_ui_duration_check_ui_and_db_count(self):
         self.login() # Log in first
-        self.client.post('/add_entry', data={'name': 'Rijder X', 'start_km': '50.0', 'end_km': '60.0', 'arrival_time_last_fox': '14:00'}) # 10km, 120min -> Rank 2
-        self.client.post('/add_entry', data={'name': 'Rijder Y', 'start_km': '70.0', 'end_km': '75.5', 'arrival_time_last_fox': '12:30'}) # 5.5km, 30min -> Rank 1
-        self.client.post('/add_entry', data={'name': 'Rijder Z', 'start_km': '80.0', 'end_km': '95.0', 'arrival_time_last_fox': '13:00'}) # 15km, 60min -> Rank 3
+        self.client.post('/add_entry', data={'name': 'Rijder X', 'start_km': '50', 'end_km': '60', 'arrival_time_last_fox': '14:00'})   # 10km, 120min
+        self.client.post('/add_entry', data={'name': 'Rijder Y', 'start_km': '70', 'end_km': '76', 'arrival_time_last_fox': '12:30'})   # 6km, 30min
+        self.client.post('/add_entry', data={'name': 'Rijder Z', 'start_km': '80', 'end_km': '95', 'arrival_time_last_fox': '13:00'})   # 15km, 60min
 
         db = get_db()
         entries_count = db.execute('SELECT COUNT(id) FROM entries').fetchone()[0]
@@ -174,34 +178,33 @@ class FoxHuntTrackerDBTests(unittest.TestCase):
         self.assertIn(b'Uitloggen', response.data) # Check for logout link
         self.assertIn(b'Nieuwe Rit Invoeren', response.data) # Check for new entry link
 
-        # Check if ranks and names are present. Order is Rijder Y (1), Rijder X (2), Rijder Z (3)
+        # Check if ranks, names, and specific calculated_km are present.
+        # Order by app logic: Rijder Y (6km, 30min -> Rank 1), Rijder X (10km, 120min -> Rank 2), Rijder Z (15km, 60min -> Rank 3)
         html_content = response.data.decode('utf-8')
-        self.assertIn(b'<td>1</td>', response.data)
-        self.assertIn(b'Rijder Y', response.data) # Rank 1
-        self.assertIn(b'<td>2</td>', response.data)
-        self.assertIn(b'Rijder X', response.data) # Rank 2
-        self.assertIn(b'<td>3</td>', response.data)
-        self.assertIn(b'Rijder Z', response.data) # Rank 3
+        import re # Ensure re is imported if not already at top of file (it is)
+        self.assertTrue(re.search(r'<td>\s*1\s*</td>.*?<td>\s*Rijder Y\s*</td>.*?<td>\s*6\s*</td>', html_content, re.DOTALL))
+        self.assertTrue(re.search(r'<td>\s*2\s*</td>.*?<td>\s*Rijder X\s*</td>.*?<td>\s*10\s*</td>', html_content, re.DOTALL))
+        self.assertTrue(re.search(r'<td>\s*3\s*</td>.*?<td>\s*Rijder Z\s*</td>.*?<td>\s*15\s*</td>', html_content, re.DOTALL))
 
-        self.assertIn(b'120', response.data) # duration for X
-        self.assertIn(b'Rijder Y', response.data)
-        self.assertIn(b'30', response.data)  # duration for Y
-        self.assertIn(b'Rijder Z', response.data)
-        self.assertIn(b'60', response.data)  # duration for Z
-        self.assertIn(b'Totaal Aantal Gereden Kilometers (iedereen): 30.5 km', response.data)
+        # Durations (already checked implicitly by rank order, but good to keep)
+        # These can remain simple assertIn as they are direct values in cells
+        self.assertIn(b'<td>120</td>', response.data) # duration for X
+        self.assertIn(b'<td>30</td>', response.data)  # duration for Y
+        self.assertIn(b'<td>60</td>', response.data)  # duration for Z
+        self.assertIn(b'Totaal Aantal Gereden Kilometers (iedereen): 31 km', response.data) # Total: 10 + 6 + 15 = 31
 
     def test_10_odometer_rollover_calculation_check_db(self):
         self.login() # Log in first
         # MAX_ODOMETER_READING is 1000.0 from setUp
         self.client.post('/add_entry', data={
-            'name': 'Rollover Car DB', 'start_km': '950.0', 'end_km': '50.0', 'arrival_time_last_fox': '13:00'
-        }) # Expected calc_km: (50.0 + 1000.0) - 950.0 = 100.0 km
+            'name': 'Rollover Car DB', 'start_km': '950', 'end_km': '50', 'arrival_time_last_fox': '13:00' # KM as int
+        }) # Expected calc_km: (50 + 1000) - 950 = 100 km
         db = get_db()
         entry = db.execute('SELECT * FROM entries WHERE name = ?', ('Rollover Car DB',)).fetchone()
         self.assertIsNotNone(entry)
-        self.assertEqual(entry['calculated_km'], 100.0)
-        self.assertEqual(entry['start_km'], 950.0) # Original start_km
-        self.assertEqual(entry['end_km'], 50.0)   # Original end_km
+        self.assertEqual(entry['calculated_km'], 100) # Check for int
+        self.assertEqual(entry['start_km'], 950)      # Check for int
+        self.assertEqual(entry['end_km'], 50)        # Check for int
 
     def test_11_negative_calculated_km_after_rollover_redirects_check_db_empty(self):
         self.login() # Log in first
@@ -209,7 +212,7 @@ class FoxHuntTrackerDBTests(unittest.TestCase):
         app.config['MAX_ODOMETER_READING'] = 50.0 # Temp set for this test
 
         response = self.client.post('/add_entry', data={
-            'name': 'Negative KM Team', 'start_km': '100.0', 'end_km': '10.0', 'arrival_time_last_fox': '13:00'
+            'name': 'Negative KM Team', 'start_km': '100', 'end_km': '10', 'arrival_time_last_fox': '13:00' # KM as int
         }, follow_redirects=True)
 
         app.config['MAX_ODOMETER_READING'] = original_max_odom # Reset
@@ -224,7 +227,7 @@ class FoxHuntTrackerDBTests(unittest.TestCase):
     def test_12_invalid_time_format_redirects_to_input_check_db_empty(self):
         self.login() # Log in first
         self.client.post('/add_entry', data={
-            'name': 'Time Error Team', 'start_km': '10.0', 'end_km': '20.0', 'arrival_time_last_fox': '99:99'
+            'name': 'Time Error Team', 'start_km': '10', 'end_km': '20', 'arrival_time_last_fox': '99:99' # KM as int
         }, follow_redirects=True)
         db = get_db()
         entries = db.execute('SELECT * FROM entries').fetchall()
@@ -232,6 +235,7 @@ class FoxHuntTrackerDBTests(unittest.TestCase):
 
     def test_13_duration_calculation_various_times_check_db(self):
         self.login() # Log in first
+        # KM data is already integer strings '0' and '1', so no change needed for km values here.
         self.client.post('/add_entry', data={'name': 'Team Noon', 'start_km': '0', 'end_km': '1', 'arrival_time_last_fox': '12:00'})
         self.client.post('/add_entry', data={'name': 'Team Noon Plus One', 'start_km': '0', 'end_km': '1', 'arrival_time_last_fox': '12:01'})
         self.client.post('/add_entry', data={'name': 'Team Late', 'start_km': '0', 'end_km': '1', 'arrival_time_last_fox': '23:59'})
@@ -253,7 +257,7 @@ class FoxHuntTrackerDBTests(unittest.TestCase):
     def test_14_rank_highlighting(self):
         """Test rank-based CSS class highlighting for top 3 entries."""
         self.login() # Log in first
-        # Entry data: (name, km_start, km_end, time_str, expected_km, expected_duration)
+        # Entry data is already using integer strings for km, so no change needed for posted data here.
         # Rank 1 (Gold)
         self.client.post('/add_entry', data={'name': 'Gold A', 'start_km': '0', 'end_km': '10', 'arrival_time_last_fox': '13:00'}) # 10km, 60min
         self.client.post('/add_entry', data={'name': 'Gold B', 'start_km': '100', 'end_km': '110', 'arrival_time_last_fox': '13:00'}) # 10km, 60min
@@ -344,7 +348,7 @@ class FoxHuntTrackerDBTests(unittest.TestCase):
         """Test that POST to /add_entry without login redirects and does not add data."""
         # Attempt to add entry without login
         response = self.client.post('/add_entry', data={
-            'name': 'Sneaky Entry', 'start_km': '0', 'end_km': '1', 'arrival_time_last_fox': '12:01'
+            'name': 'Sneaky Entry', 'start_km': '0', 'end_km': '1', 'arrival_time_last_fox': '12:01' # Already int strings
         }, follow_redirects=False)
         self.assertEqual(response.status_code, 302)
         expected_redirect_url = f"/login?next=http://{app.config['SERVER_NAME']}/add_entry"
@@ -357,7 +361,7 @@ class FoxHuntTrackerDBTests(unittest.TestCase):
         # Log in and add entry
         self.login()
         response = self.client.post('/add_entry', data={
-            'name': 'Legit Entry', 'start_km': '0', 'end_km': '1', 'arrival_time_last_fox': '12:01'
+            'name': 'Legit Entry', 'start_km': '0', 'end_km': '1', 'arrival_time_last_fox': '12:01' # Already int strings
         }, follow_redirects=True)
         self.assertEqual(response.status_code, 200) # Should redirect to results
         entry = db.execute('SELECT * FROM entries WHERE name = ?', ('Legit Entry',)).fetchone()

@@ -38,10 +38,10 @@
                 <tr class="{% if entry.rank == 1 %}rank-gold{% elif entry.rank == 2 %}rank-silver{% elif entry.rank == 3 %}rank-bronze{% endif %}">
                     <td>{{ entry['rank'] }}</td> <!-- New First Cell for Rank -->
                     <td>{{ entry.name }}</td>
-                    <td>{{ entry['calculated_km'] }}</td>
+                    <td>{{ entry['calculated_km']|int }}</td>
                     <td>{{ entry['duration_minutes'] if entry['duration_minutes'] is not none else 'N/A' }}</td>
-                    <td>{{ entry.start_km }}</td>
-                    <td>{{ entry.end_km }}</td>
+                    <td>{{ entry['start_km']|int }}</td>
+                    <td>{{ entry['end_km']|int }}</td>
                     <td>{{ entry.arrival_time_last_fox }}</td>
                 </tr>
                 {% endfor %}
@@ -50,7 +50,7 @@
     {% else %}
         <p>Nog geen ritten ingevoerd.</p>
     {% endif %}
-    <h2>Totaal Aantal Gereden Kilometers (iedereen): {{ total_kilometers_all_participants }} km</h2>
+    <h2>Totaal Aantal Gereden Kilometers (iedereen): {{ total_kilometers_all_participants|int }} km</h2>
     <br>
     {% if session.logged_in %}
         <a href="{{ url_for('logout') }}">Uitloggen</a> |

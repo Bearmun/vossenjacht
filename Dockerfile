@@ -1,13 +1,22 @@
 # Use an official Python runtime as a parent image
 FROM python:3.9-slim-buster
 
-# Set environment variables
+# Set environment variables for Python
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
+
+# Set Timezone
+ENV TZ="Europe/Amsterdam"
+
+# Install tzdata for timezone support
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y tzdata && \
+    rm -rf /var/lib/apt/lists/*
+
+# Set Flask environment variables
 ENV FLASK_APP app.py
 ENV FLASK_RUN_HOST 0.0.0.0
 ENV FLASK_RUN_PORT 8080
-# Define a directory for the database that can be mounted as a volume
 ENV DATABASE_PATH /data/foxhunt.db
 
 # Set the working directory in the container
