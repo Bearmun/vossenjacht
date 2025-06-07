@@ -121,14 +121,20 @@ a:hover {
 }
 
 .button-link-delete {
-    background: none!important;
-    border: none;
-    padding: 0!important;
-    color: #dc3545; /* Bootstrap's danger color, or any red */
+    background-color: transparent !important; /* Explicitly transparent */
+    background: none !important; /* Keep this for good measure */
+    border: none !important; /* Ensure no border */
+    padding: 0 !important;
+    margin: 0; /* Remove any default margins */
+    color: #dc3545; /* Red color */
     text-decoration: underline;
     cursor: pointer;
-    font-size: inherit; /* Inherit font size from table cell */
-    font-family: inherit; /* Inherit font family */
+    font-size: inherit;
+    font-family: inherit;
+    vertical-align: baseline; /* Align with surrounding text/links */
+    appearance: none; /* Attempt to disable native browser styling */
+    -webkit-appearance: none; /* For Safari/Chrome */
+    -moz-appearance: none; /* For Firefox */
 }
 
 .button-link-delete:hover {
