@@ -2,7 +2,9 @@ name: Docker Image CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - "main"
+      - "jules_wip_13023561610931168503" # Added this line
   workflow_dispatch:
 
 jobs:
