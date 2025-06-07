@@ -1,13 +1,19 @@
 import sqlite3
 import click
-from flask import Flask, render_template, request, redirect, url_for, g, current_app
+from flask import Flask, render_template, request, redirect, url_for, g, current_app, cli # cli was missing here from a previous diff, ensuring it's present
 from datetime import datetime
+import os # Import os module
+import click # click was missing here from a previous diff
 
 # DATABASE = 'foxhunt.db' # Replaced by config
 app = Flask(__name__)
+
+# Determine database path: prioritize DATABASE_PATH env var, then default.
+database_actual_path = os.environ.get('DATABASE_PATH', 'foxhunt.db')
+
 # Ensure MAX_ODOMETER_READING is in app.config if not set by tests
 app.config.setdefault('MAX_ODOMETER_READING', 1000.0)
-app.config.setdefault('DATABASE_FILENAME', 'foxhunt.db') # Default DB filename
+app.config.setdefault('DATABASE_FILENAME', database_actual_path) # Use determined path
 
 def get_db():
     """Connect to the application's configured database. The connection

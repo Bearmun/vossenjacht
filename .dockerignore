@@ -1,0 +1,37 @@
+# Git files
+.git/
+.gitignore
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment folder (common names)
+.venv/
+venv/
+env/
+ENV/
+
+# Database file (should be managed by a volume, not built into the image)
+foxhunt.db
+*.sqlite3 # General pattern for sqlite databases
+*.db # General pattern for database files
+
+# Test files (not needed in the production image)
+tests/
+test_*.py
+*.test
+*.tests
+
+# Docker files themselves
+Dockerfile
+.dockerignore
+
+# README (optional, but often not needed in image)
+README.md
+
+# OS-specific files
+.DS_Store
+Thumbs.db
