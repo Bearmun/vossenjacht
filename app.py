@@ -32,9 +32,10 @@ def close_db(e=None):
 
 def init_db():
     db = get_db()
+    # Use executescript for CREATE TABLE IF NOT EXISTS to be safe,
+    # though a single execute would also work for a single statement.
     db.executescript('''
-        DROP TABLE IF EXISTS entries;
-        CREATE TABLE entries (
+        CREATE TABLE IF NOT EXISTS entries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             start_km REAL NOT NULL,
@@ -44,6 +45,11 @@ def init_db():
             duration_minutes INTEGER NOT NULL
         );
     ''')
+    # No explicit commit is strictly needed for CREATE TABLE IF NOT EXISTS
+    # when autocommit is often on or if it's the only command.
+    # However, keeping db.commit() doesn't harm and ensures it if other
+    # schema modifications were added later in the same transaction.
+    # For simplicity and safety, let's keep the commit.
     db.commit()
 
 @click.command('init-db')
