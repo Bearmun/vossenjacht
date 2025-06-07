@@ -125,47 +125,55 @@ The workflow also tags images with the long Git commit SHA. You can pull a speci
 
 ## Running with Docker Compose
 
-For easier local development and management, a `docker-compose.yml` file is provided.
+For easier local development and management, a `docker-compose.yml` file is provided. This setup uses pre-built Docker images from GitHub Container Registry (GHCR) that are automatically created by GitHub Actions.
 
 1.  **Prerequisites:**
     *   Docker installed and running.
-    *   Docker Compose installed (often included with Docker Desktop, or can be installed separately as a plugin or standalone).
+    *   Docker Compose installed.
 
-2.  **Build and Run the Application:**
+2.  **Configuration (Important!):**
+    *   The `docker-compose.yml` file is configured to use an image from GHCR: `image: ghcr.io/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME:latest`.
+    *   **You MUST replace `YOUR_GITHUB_USERNAME` and `YOUR_REPO_NAME` in the `docker-compose.yml` file with your actual GitHub username (or organization) and repository name.**
+    *   Similarly, replace these placeholders in any `docker pull` commands mentioned below.
+
+3.  **Pull the Latest Image (Recommended):**
+    *   Before starting the services, it's good practice to pull the latest image from GHCR:
+        `docker pull ghcr.io/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME:latest`
+        *(Remember to replace placeholders!)*
+
+4.  **Run the Application:**
     *   Open your terminal in the project root directory (where `docker-compose.yml` is located).
-    *   Run the following command to build the image (if it doesn't exist or if changes were made to the Dockerfile/app) and start the service(s) in detached mode:
-        `docker-compose up -d --build`
-        *   `--build`: Forces Docker Compose to build the image before starting the containers. Omit this if you want to use a previously built image and just start the container.
-        *   `-d`: Run in detached mode (in the background).
-    *   If you only want to start the services without necessarily rebuilding:
+    *   Run the following command to start the service(s) in detached mode:
         `docker-compose up -d`
+        *   This command will attempt to pull the image if it's not already present locally.
+        *   `-d`: Run in detached mode (in the background).
 
-3.  **Access the Application:**
+5.  **Access the Application:**
     *   Open your web browser and go to `http://localhost:8080`.
 
-4.  **Database Persistence:**
+6.  **Database Persistence:**
     *   The `docker-compose.yml` file defines a named volume called `vreetvos_db_data`. This volume is used to store the SQLite database (`foxhunt.db` located at `/data/foxhunt.db` inside the container).
     *   Your data will persist even if you stop and remove the container, as long as the named volume `vreetvos_db_data` is not explicitly deleted.
 
-5.  **Database Initialization (First Run with New Volume):**
+7.  **Database Initialization (First Run with New Volume):**
     *   The application is configured to create the database and table if they don't exist when it starts.
     *   If you ever need to manually initialize or reset the database within the container managed by Docker Compose:
         `docker-compose exec vreetvos-app flask init-db`
         *   `vreetvos-app` is the service name defined in `docker-compose.yml`.
 
-6.  **Viewing Logs:**
+8.  **Viewing Logs:**
     *   To view the logs from the running application service:
         `docker-compose logs -f vreetvos-app`
         *   `-f`: Follow log output.
 
-7.  **Stopping the Application:**
+9.  **Stopping the Application:**
     *   To stop the services defined in `docker-compose.yml`:
         `docker-compose down`
         *   This command stops and removes the containers. Network and volumes are not removed by default.
     *   To stop and remove the named volume (deleting all data):
         `docker-compose down -v`
 
-8.  **Rebuilding the Image:**
-    *   If you make changes to the `Dockerfile` or application code that requires a new image:
-        `docker-compose build vreetvos-app`
-    *   Or simply use `docker-compose up -d --build`.
+10. **Updating the Image:**
+    *   To update to a newer version of the image from GHCR:
+        1.  Pull the latest image: `docker pull ghcr.io/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME:latest`
+        2.  Restart your services: `docker-compose up -d` (Compose will detect the new image and recreate the container).
