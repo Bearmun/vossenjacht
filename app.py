@@ -184,5 +184,163 @@ def results():
 
     return render_template('results.html', entries=ranked_entries_with_dense_rank, total_kilometers_all_participants=int(total_kilometers_all))
 
+# Add this new route in app.py
+@app.route('/settings')
+@login_required
+def settings():
+    db = get_db()
+    # Fetch entries, similar to /results.
+    entries_rows = db.execute('SELECT * FROM entries ORDER BY calculated_km ASC, duration_minutes ASC').fetchall()
+
+    entries_list = [dict(row) for row in entries_rows]
+
+    # Re-use ranking logic from /results route for consistency
+    ranked_entries = []
+    last_score = None
+    current_dense_rank = 0
+    if entries_list: # Ensure there are entries before trying to rank
+        for entry_data in entries_list: # Renamed to avoid conflict with outer 'entry' if copy-pasting
+            # Ensure numeric fields are integers for consistent display/logic
+            entry_data['start_km'] = int(entry_data['start_km'])
+            entry_data['end_km'] = int(entry_data['end_km'])
+            entry_data['calculated_km'] = int(entry_data['calculated_km'])
+            entry_data['duration_minutes'] = int(entry_data['duration_minutes'])
+
+            current_score = (entry_data['calculated_km'], entry_data['duration_minutes'])
+            if current_score != last_score:
+                current_dense_rank += 1
+                last_score = current_score
+
+            mutable_entry = dict(entry_data) # Already a dict, but ensures it's a mutable copy
+            mutable_entry['rank'] = current_dense_rank
+            ranked_entries.append(mutable_entry)
+
+    return render_template('settings.html', entries=ranked_entries)
+
+@app.route('/delete_entry/<int:entry_id>', methods=['POST'])
+@login_required
+def delete_entry(entry_id):
+    db = get_db()
+    # Check if entry exists before deleting (optional, but good practice)
+    entry = db.execute('SELECT id FROM entries WHERE id = ?', (entry_id,)).fetchone()
+    if entry:
+        db.execute('DELETE FROM entries WHERE id = ?', (entry_id,))
+        db.commit()
+        # Optionally, add a flash message here: flash('Rit succesvol verwijderd.', 'success')
+    # else:
+        # Optionally, flash an error if entry not found: flash('Rit niet gevonden.', 'error')
+    # else:
+        # Optionally, flash an error if entry not found: flash('Rit niet gevonden.', 'error')
+    return redirect(url_for('settings'))
+
+@app.route('/edit_entry/<int:entry_id>', methods=['GET', 'POST']) # Added 'POST'
+@login_required
+def edit_entry(entry_id):
+    db = get_db()
+    # Fetch existing entry for GET or if POST fails and needs to re-render form
+    entry_data = db.execute(
+        'SELECT id, name, start_km, end_km, arrival_time_last_fox '
+        'FROM entries WHERE id = ?',
+        (entry_id,)
+    ).fetchone()
+
+    if entry_data is None:
+        # flash('Rit niet gevonden.', 'error')
+        return redirect(url_for('settings'))
+
+    # Convert to mutable dict for form pre-filling and potential re-render
+    entry_dict = dict(entry_data)
+    # Ensure km fields are int for form pre-filling (on GET or if POST fails)
+    entry_dict['start_km'] = int(entry_dict['start_km'])
+    entry_dict['end_km'] = int(entry_dict['end_km'])
+
+
+    if request.method == 'POST':
+        try:
+            # Retrieve and process form data
+            name = request.form['name']
+            start_km = int(float(request.form['start_km']))
+            end_km = int(float(request.form['end_km']))
+            arrival_time_str = request.form['arrival_time_last_fox']
+
+            # Recalculate driven_km and duration
+            max_odom_reading = int(current_app.config.get('MAX_ODOMETER_READING', 1000))
+            actual_end_km = end_km
+            if end_km < start_km:  # Odometer rollover
+                actual_end_km += max_odom_reading
+
+            calculated_km = int(round(actual_end_km - start_km))
+
+            if calculated_km < 0:
+                # flash('Negatieve gereden kilometers na aanpassing. Controleer de kilometerstanden.', 'error')
+                # Re-render form with error and existing (modified by user) data
+                # For this, we need to pass back the current form values, not just original entry_dict
+                form_data_for_template = {
+                    'id': entry_id, # Keep id for the form action
+                    'name': name,
+                    'start_km': start_km,
+                    'end_km': end_km,
+                    'arrival_time_last_fox': arrival_time_str
+                }
+                # return render_template('edit_entry.html', entry=form_data_for_template, error='Negatieve berekende kilometers.')
+                # Simpler for now: redirect to GET, losing user's invalid input but avoiding complex error render
+                print(f"Warning: Negative calculated_km for entry {entry_id} edit. User input: Name={name}, StartKM={start_km}, EndKM={end_km}")
+                return redirect(url_for('edit_entry', entry_id=entry_id))
+
+
+            arrival_dt = datetime.strptime(arrival_time_str, '%H:%M')
+            start_dt = datetime.strptime('12:00', '%H:%M')
+            duration_delta = arrival_dt - start_dt
+            duration_minutes = int(duration_delta.total_seconds() / 60)
+
+            # Update database
+            db.execute(
+                'UPDATE entries SET name = ?, start_km = ?, end_km = ?, '
+                'arrival_time_last_fox = ?, calculated_km = ?, duration_minutes = ? '
+                'WHERE id = ?',
+                (name, start_km, end_km, arrival_time_str, calculated_km, duration_minutes, entry_id)
+            )
+            db.commit()
+            # flash('Rit succesvol bijgewerkt.', 'success')
+            return redirect(url_for('settings'))
+
+        except ValueError: # For float/int conversion or time parsing errors
+            # flash('Ongeldige invoer. Controleer de velden.', 'error')
+            # Re-render form with an error and original data (or redirect to GET)
+            # For simplicity, redirect to GET which re-fetches original data.
+            # A more advanced implementation would re-render with user's (invalid) data.
+            print(f"ValueError during edit for entry {entry_id}: Likely invalid number or time format.")
+            return redirect(url_for('edit_entry', entry_id=entry_id))
+        except Exception as e:
+            # Log the exception e
+            print(f"Error updating entry {entry_id}: {e}")
+            # flash('Er is een fout opgetreden bij het bijwerken.', 'error')
+            return redirect(url_for('edit_entry', entry_id=entry_id))
+
+    # For GET request, or if POST had an error and redirected to GET:
+    return render_template('edit_entry.html', entry=entry_dict)
+
+@app.route('/clear_database', methods=['POST'])
+@login_required
+def clear_database():
+    confirmation_text = request.form.get('confirm_text')
+    # Server-side validation of the confirmation text
+    if confirmation_text == "VERWIJDER ALLES":
+        db = get_db()
+        try:
+            db.execute('DELETE FROM entries')
+            db.commit()
+            # flash('Alle ritten zijn succesvol verwijderd uit de database.', 'success')
+            print("Database cleared successfully by user.") # Server log
+        except Exception as e:
+            # Log the exception e
+            print(f"Error clearing database: {e}")
+            # flash('Er is een fout opgetreden bij het wissen van de database.', 'error')
+    else:
+        # flash('Database niet gewist. Bevestigingstekst was incorrect.', 'warning')
+        print(f"Database clear attempt failed due to incorrect confirmation text: '{confirmation_text}'") # Server log
+
+    return redirect(url_for('settings'))
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8080)

@@ -16,6 +16,9 @@ The application is primarily in Dutch.
 *   User interface in Dutch.
 *   Persistent data storage using SQLite (`foxhunt.db`).
 *   Basic password protection for data entry forms.
+*   A password-protected "Instellingen" (Settings) page for data management, including:
+    *   Listing all entries with options to edit or delete individual entries.
+    *   Functionality to clear the entire database (with strong confirmation).
 
 ## Configuration
 
@@ -111,6 +114,24 @@ The application can be configured using environment variables.
 *   To run the unit tests, navigate to the project root in your terminal and execute:
     `python -m unittest tests/test_app.py`
 
+## Instellingen (Settings Page)
+
+The application includes a password-protected settings page accessible at `/settings` for managing hunt entries. You must be logged in to access this page.
+
+From the settings page, you can:
+
+*   **View all entries:** A comprehensive list of all submitted fox hunt results is displayed.
+*   **Edit an entry:** Each entry has an "Bewerk" (Edit) option, allowing you to modify its details (name, kilometer readings, arrival time). Changes will automatically recalculate driven kilometers and duration.
+*   **Delete an entry:** Each entry has a "Verwijder" (Delete) option. A confirmation prompt will appear before the entry is permanently removed.
+*   **Clear Entire Database:**
+    *   A section under "Database Beheer" (Database Management) allows for the deletion of ALL entries from the database.
+    *   **Warning:** This action is irreversible and permanently deletes all data.
+    *   To prevent accidental data loss, you must:
+        1.  Confirm via a browser pop-up dialog.
+        2.  Type the exact phrase "VERWIJDER ALLES" into a confirmation text box.
+    *   Only proceed if you are absolutely certain you want to erase all records.
+
+All administrative actions on the settings page require you to be logged in.
 
 ## Running with Docker
 

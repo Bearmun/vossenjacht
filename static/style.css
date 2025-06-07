@@ -119,3 +119,36 @@ a:hover {
 .rank-gold td, .rank-silver td, .rank-bronze td {
     color: #000000; /* Black text for better contrast, adjust if needed */
 }
+
+.button-link-delete {
+    background: none!important;
+    border: none;
+    padding: 0!important;
+    color: #dc3545; /* Bootstrap's danger color, or any red */
+    text-decoration: underline;
+    cursor: pointer;
+    font-size: inherit; /* Inherit font size from table cell */
+    font-family: inherit; /* Inherit font family */
+}
+
+.button-link-delete:hover {
+    color: #a71d2a; /* Darker red on hover */
+}
+
+.button-link-edit {
+    /* Similar to delete, but maybe a different color e.g. blue */
+    color: #007bff; /* Bootstrap's primary color */
+    text-decoration: underline;
+    cursor: pointer;
+    /* To make it behave more like a link if it were a button:
+    background: none!important;
+    border: none;
+    padding: 0!important;
+    font-size: inherit;
+    font-family: inherit;
+    */
+}
+
+.button-link-edit:hover {
+    color: #0056b3; /* Darker blue on hover */
+}

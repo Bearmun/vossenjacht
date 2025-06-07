@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bewerk Rit - Vreetvos Resultaten</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <h1>Bewerk Rit</h1>
+
+    {% if entry %}
+        <form method="POST" action="{{ url_for('edit_entry', entry_id=entry.id) }}">
+            <label for="name">Naam:</label><br>
+            <input type="text" id="name" name="name" value="{{ entry.name }}" required><br><br>
+
+            <label for="start_km">Begin Kilometerstand:</label><br>
+            <input type="number" step="1" id="start_km" name="start_km" value="{{ entry.start_km|int }}" required><br><br>
+
+            <label for="end_km">Eind Kilometerstand:</label><br>
+            <input type="number" step="1" id="end_km" name="end_km" value="{{ entry.end_km|int }}" required><br><br>
+
+            <label for="arrival_time_last_fox">Aankomsttijd Laatste Vos (UU:MM):</label><br>
+            <input type="time" id="arrival_time_last_fox" name="arrival_time_last_fox" value="{{ entry.arrival_time_last_fox }}" required><br><br>
+
+            <input type="submit" value="Opslaan">
+            <a href="{{ url_for('settings') }}" style="margin-left: 10px;">Annuleren</a>
+        </form>
+    {% else %}
+        <p>Rit niet gevonden.</p>
+        <p><a href="{{ url_for('settings') }}">Terug naar Instellingen</a></p>
+    {% endif %}
+</body>
+</html>

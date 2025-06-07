@@ -53,8 +53,9 @@
     <h2>Totaal Aantal Gereden Kilometers (iedereen): {{ total_kilometers_all_participants|int }} km</h2>
     <br>
     {% if session.logged_in %}
-        <a href="{{ url_for('logout') }}">Uitloggen</a> |
-        <a href="{{ url_for('input_form') }}">Nieuwe Rit Invoeren</a>
+        <a href="{{ url_for('input_form') }}">Nieuwe Rit Invoeren</a> |
+        <a href="{{ url_for('settings') }}">Instellingen</a> |
+        <a href="{{ url_for('logout') }}">Uitloggen</a>
     {% else %}
         <a href="{{ url_for('login') }}">Inloggen om Rit In te Voeren</a>
     {% endif %}
