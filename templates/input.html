@@ -3,27 +3,87 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vossenjacht Invoer</title>
+    <title>Vreetvos Rit Invoer</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; background-color: #f4f4f4; color: #333; }
+        header { background-color: #333; color: #fff; padding: 10px 0; text-align: center; margin-bottom: 20px;}
+        header nav a { margin: 0 15px; color: #fff; text-decoration: none; font-weight: bold; }
+        header nav a:hover { text-decoration: underline; }
+        .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); max-width: 600px; margin: auto; }
+        h1 { color: #333; text-align: center; margin-bottom: 20px; }
+        form { display: grid; grid-template-columns: auto 1fr; gap: 15px; align-items: center; }
+        label { text-align: right; font-weight: bold; }
+        input[type="text"], input[type="number"], select, input[type="time"] { padding: 10px; border: 1px solid #ddd; border-radius: 4px; width: 100%; box-sizing: border-box; font-size: 1rem; }
+        input[type="submit"] { grid-column: 2 / 3; background-color: #007bff; color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; justify-self: start; font-size: 1rem; }
+        input[type="submit"]:hover { background-color: #0056b3; }
+        .nav-links-bottom { margin-top: 30px; text-align: center; }
+        .nav-links-bottom a { margin: 0 10px; text-decoration: none; color: #007bff; }
+        .error { color: red; margin-bottom: 10px; text-align: center; grid-column: 1 / 3; background-color: #ffdddd; padding: 10px; border-radius: 4px;}
+        .flashed-messages p { padding: 10px; margin-bottom:15px; border-radius:4px; text-align:center; }
+        .flashed-messages .error, .flashed-messages .category-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;}
+        .flashed-messages .success, .flashed-messages .category-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb;}
+    </style>
 </head>
 <body>
-    <h1>Nieuwe Vossenjacht Rit Invoeren</h1>
-    <form action="/add_entry" method="post">
-        <label for="name">Naam:</label><br>
-        <input type="text" id="name" name="name" required><br><br>
+    <header>
+        <nav>
+            <a href="{{ url_for('results') }}">Resultaten</a>
+            {% if session.user_id %}
+            <a href="{{ url_for('input_form') }}">Nieuwe Rit</a>
+            <a href="{{ url_for('list_vossenjachten_page') }}">Vossenjachten</a>
+            <a href="{{ url_for('settings') }}">Instellingen/Entries</a>
+                {% if session.role == 'admin' %}
+            <a href="{{ url_for('manage_users_page') }}">User Management</a>
+                {% endif %}
+            <a href="{{ url_for('logout') }}">Uitloggen ({{ session.username }})</a>
+            {% else %}
+            <a href="{{ url_for('login') }}">Inloggen</a>
+            {% endif %}
+        </nav>
+    </header>
+    <div class="container">
+        <h1>Nieuwe Rit Invoeren</h1>
 
-        <label for="start_km">Begin Kilometerstand:</label><br>
-        <input type="number" step="1" id="start_km" name="start_km" required><br><br>
+        <div class="flashed-messages">
+        {% if error %} <!-- For direct error variable from render_template -->
+            <p class="error">{{ error }}</p>
+        {% endif %}
+        {% with messages = get_flashed_messages(with_categories=true) %} <!-- For flashed messages -->
+            {% if messages %}
+                {% for category, message in messages %}
+                    <p class="category-{{category}}">{{ message }}</p>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        </div>
 
-        <label for="end_km">Eind Kilometerstand:</label><br>
-        <input type="number" step="1" id="end_km" name="end_km" required><br><br>
+        <form action="{{ url_for('add_entry') }}" method="post">
+            <label for="vossenjacht_id">Vossenjacht:</label>
+            <select id="vossenjacht_id" name="vossenjacht_id" required>
+                <option value="" disabled {% if not request.form.vossenjacht_id %}selected{% endif %}>-- Selecteer een Vossenjacht --</option>
+                {% for vj in active_vossenjachten %}
+                <option value="{{ vj.id }}" {% if request.form.vossenjacht_id == vj.id|string %}selected{% endif %}>{{ vj.name }}</option>
+                {% endfor %}
+            </select>
 
-        <label for="arrival_time_last_fox">Aankomsttijd Laatste Vos (UU:MM):</label><br>
-        <input type="time" id="arrival_time_last_fox" name="arrival_time_last_fox" value="{{ current_time_for_form if current_time_for_form else '' }}" required><br><br>
+            <label for="name">Naam Deelnemer:</label>
+            <input type="text" id="name" name="name" required value="{{ request.form.name if request.form.name else '' }}">
 
-        <input type="submit" value="Rit Opslaan">
-    </form>
-    <br>
-    <p><a href="{{ url_for('logout') }}">Uitloggen</a> | <a href="{{ url_for('results') }}">Bekijk Resultaten</a></p>
+            <label for="start_km">Start km-stand:</label>
+            <input type="number" step="0.1" id="start_km" name="start_km" required value="{{ request.form.start_km if request.form.start_km else '' }}">
+
+            <label for="end_km">Eind km-stand:</label>
+            <input type="number" step="0.1" id="end_km" name="end_km" required value="{{ request.form.end_km if request.form.end_km else '' }}">
+
+            <label for="arrival_time_last_fox">Aankomsttijd (HH:MM):</label>
+            <input type="time" id="arrival_time_last_fox" name="arrival_time_last_fox" value="{{ request.form.arrival_time_last_fox if request.form.arrival_time_last_fox else current_time_for_form }}" required pattern="\d{2}:\d{2}">
+
+            <input type="submit" value="Rit Opslaan">
+        </form>
+        <div class="nav-links-bottom">
+             <a href="{{ url_for('results') }}">Terug naar Resultaten</a>
+        </div>
+    </div>
 </body>
 </html>
