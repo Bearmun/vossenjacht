@@ -1,30 +1,52 @@
-version: '3.8'
+# Docker Compose file for the Fox Hunt Statistics Tracker application.
+# This file defines the services, networks, and volumes for running the application.
+# It's configured to use pre-built images from GitHub Container Registry (GHCR)
+# and allows for easy configuration using an .env file (recommended for secrets).
+version: '3.8' # Specifies the Docker Compose file format version.
 
-services:
-  vreetvos-app:
-    # The image will be pulled from GHCR.
-    # IMPORTANT: Replace YOUR_GITHUB_USERNAME and YOUR_REPO_NAME with your actual GitHub username/organization and repository name.
+services: # Defines the different application services (containers).
+  vreetvos-app: # The main application service.
+    # Image to use for the service.
+    # CRITICAL: You MUST replace YOUR_GITHUB_USERNAME and YOUR_REPO_NAME
+    # with your actual GitHub username (or organization) and repository name.
+    # Example: image: ghcr.io/myuser/myfoxhuntapp:latest
     image: ghcr.io/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME:latest
-    container_name: vreetvos-app-container
-    ports:
-      - "8080:8080"
-    volumes:
+    container_name: vreetvos-app-container # Specifies a custom container name.
+    ports: # Maps ports from the host to the container.
+      - "8080:8080" # Maps port 8080 on the host to port 8080 in the container (where Flask runs).
+    volumes: # Mounts host paths or named volumes into the container.
+      # Mounts the named volume 'vreetvos_db_data' to '/data' in the container.
+      # This is where the SQLite database (defined by DATABASE_PATH env var) will be stored for persistence.
       - vreetvos_db_data:/data
-    environment:
-      # Timezone (matches Dockerfile default, can be overridden here or by .env file)
-      - TZ=Europe/Amsterdam
-      # Flask Secret Key for session management
-      # IMPORTANT: Change this to a strong, unique random string for production!
-      # Best practice is to use an .env file for this.
-      - FLASK_SECRET_KEY=your_very_strong_and_unique_secret_key_here_please_change_me
-      # Admin password for accessing the input form
-      # IMPORTANT: Change this for production!
-      # Best practice is to use an .env file for this.
-      - VREETVOS_ADMIN_PASSWORD=vreetvos_admin
-      # Database path (matches Dockerfile default, can be overridden here or by .env file)
-      - DATABASE_PATH=/data/foxhunt.db
-    restart: unless-stopped
+    environment: # Defines environment variables to be set inside the container.
+                  # It's STRONGLY recommended to use an .env file for these, especially secrets.
+      # Sets the timezone for the application.
+      # Example: TZ=America/New_York. Default in Dockerfile is Europe/Amsterdam.
+      - TZ=${TZ:-Europe/Amsterdam}
 
-volumes:
-  vreetvos_db_data:
-    # driver: local
+      # Flask Secret Key: Used for session management and security.
+      # IMPORTANT: This is a placeholder. CHANGE THIS to a strong, unique random string for any real deployment.
+      # Store this in your .env file.
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:-your_very_strong_random_secret_key_here_please_change_me}
+
+      # Initial Admin User Credentials: Used to create the first admin user if no admin exists.
+      # IMPORTANT: These are placeholders. CHANGE THEM for your initial setup.
+      # Store these in your .env file and consider removing them after the first run.
+      - INITIAL_ADMIN_USERNAME=${INITIAL_ADMIN_USERNAME:-admin}
+      - INITIAL_ADMIN_PASSWORD=${INITIAL_ADMIN_PASSWORD:-changeme_strong_password}
+
+      # Database Path: Specifies the location of the SQLite database file inside the container.
+      # This path is within the '/data' volume mount defined above.
+      - DATABASE_PATH=${DATABASE_PATH:-/data/foxhunt.db}
+
+      # Max Odometer Reading: Value for odometer rollover calculation.
+      # Default is 1000 in the app. Uncomment and set if you need a different value.
+      # - MAX_ODOMETER_READING=${MAX_ODOMETER_READING:-1000}
+    restart: unless-stopped # Configures the restart policy for the container.
+                           # 'unless-stopped' means it will restart unless manually stopped.
+
+volumes: # Defines named volumes that can be used by services.
+  vreetvos_db_data: # Named volume for persistent database storage.
+    # driver: local # Specifies the volume driver (optional, 'local' is default).
+    # Using a named volume ensures the data persists even if the container is removed and recreated.
+    # The actual data is managed by Docker on the host system.
