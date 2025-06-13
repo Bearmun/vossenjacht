@@ -3,61 +3,123 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vreetvos resultaten</title> <!-- Changed -->
+    <title>{{ title if title else "Vreetvos Resultaten" }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; background-color: #f4f4f4; color: #333; }
+        header { background-color: #333; color: #fff; padding: 10px 0; text-align: center; margin-bottom: 20px;}
+        header nav a { margin: 0 15px; color: #fff; text-decoration: none; font-weight: bold; }
+        header nav a:hover { text-decoration: underline; }
+        .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); width: 90%; max-width: 1200px; margin: auto; }
+        h1 { color: #333; text-align: center; }
+        h2.subtitle { font-size: 1.3em; color: #555; text-align: center; margin-bottom:15px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background-color: #e9ecef; color: #495057; }
+        tr:nth-child(even) { background-color: #f8f9fa; }
+        tr.rank-gold td { background-color: gold !important; }
+        tr.rank-silver td { background-color: silver !important; }
+        tr.rank-bronze td { background-color: #cd7f32 !important; }
+        .filter-form { margin-bottom: 25px; text-align: center; padding: 15px; background-color: #f8f9fa; border-radius: 8px;}
+        .filter-form label { font-weight: bold; margin-right: 10px; }
+        .filter-form select, .filter-form button { padding: 10px 15px; border-radius: 5px; border: 1px solid #ced4da; font-size: 1rem; }
+        .filter-form button { background-color: #007bff; color: white; cursor: pointer; margin-left: 10px; }
+        .filter-form button:hover { background-color: #0056b3; }
+        .total-km { margin-top:20px; padding: 15px; background-color: #e9ecef; border-radius:8px; text-align: center; font-weight: bold; font-size: 1.2em;}
+        .nav-links-bottom { margin-top: 30px; text-align: center; padding-top: 20px; border-top: 1px solid #eee; }
+        .nav-links-bottom a { margin: 0 15px; text-decoration: none; color: #007bff; font-weight: bold; }
+        .user-info { text-align: center; margin-top: 15px; color: #6c757d; font-size: 0.9em; }
+    </style>
 </head>
 <body>
-    <h1>Vreetvos resultaten</h1> <!-- Changed -->
-    {% if db_error %}
-        <p style="color: red;">Database Fout: {{ db_error }}</p>
-    {% endif %}
-    {% if entries %}
-        <table>
-            <colgroup>
-                <col style="width: 10%;"> <!-- Plaats -->
-                <col style="width: 25%;"> <!-- Naam -->
-                <col style="width: 15%;"> <!-- Gereden KM -->
-                <col style="width: 15%;"> <!-- Duur (minuten) -->
-                <col style="width: 10%;"> <!-- Begin KM -->
-                <col style="width: 10%;"> <!-- Eind KM -->
-                <col style="width: 15%;"> <!-- Aankomsttijd -->
-            </colgroup>
-            <thead>
-                <tr>
-                    <th>Plaats</th> <!-- New First Column -->
-                    <th>Naam</th>
-                    <th>Gereden KM</th>
-                    <th>Duur (minuten)</th>
-                    <th>Begin KM</th>
-                    <th>Eind KM</th>
-                    <th>Aankomsttijd Laatste Vos</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for entry in entries %}
-                <tr class="{% if entry.rank == 1 %}rank-gold{% elif entry.rank == 2 %}rank-silver{% elif entry.rank == 3 %}rank-bronze{% endif %}">
-                    <td>{{ entry['rank'] }}</td> <!-- New First Cell for Rank -->
-                    <td>{{ entry.name }}</td>
-                    <td>{{ entry['calculated_km']|int }} km</td>
-                    <td>{{ entry['duration_minutes'] if entry['duration_minutes'] is not none else 'N/A' }}{% if entry['duration_minutes'] is not none %} min{% endif %}</td>
-                    <td>{{ entry['start_km']|int }}</td>
-                    <td>{{ entry['end_km']|int }}</td>
-                    <td>{{ entry.arrival_time_last_fox }}</td>
-                </tr>
+    <header>
+        <nav>
+            <a href="{{ url_for('results') }}">Resultaten</a>
+            {% if session.user_id %}
+            <a href="{{ url_for('input_form') }}">Nieuwe Rit</a>
+            <a href="{{ url_for('list_vossenjachten_page') }}">Vossenjachten</a>
+            <a href="{{ url_for('settings') }}">Instellingen/Entries</a>
+                {% if session.role == 'admin' %}
+            <a href="{{ url_for('manage_users_page') }}">User Management</a>
+                {% endif %}
+            <a href="{{ url_for('logout') }}">Uitloggen ({{ session.username }})</a>
+            {% else %}
+            <a href="{{ url_for('login') }}">Inloggen</a>
+            {% endif %}
+        </nav>
+    </header>
+
+    <div class="container">
+        <h1>Vreetvos Resultaten</h1>
+        {% if current_vossenjacht_name %}
+            <h2 class="subtitle">Resultaten voor: {{ current_vossenjacht_name }}</h2>
+        {% else %}
+            <h2 class="subtitle">Overzicht Alle Vossenjachten</h2>
+        {% endif %}
+
+        <form class="filter-form" method="GET" action="{{ url_for('results') }}">
+            <label for="vj_id">Filter op Vossenjacht:</label>
+            <select name="vj_id" id="vj_id" onchange="this.form.submit()">
+                <option value="">Alle Vossenjachten</option>
+                {% for vj in all_vossenjachten %}
+                <option value="{{ vj.id }}" {% if selected_vj_id == vj.id %}selected{% endif %}>{{ vj.name }}</option>
                 {% endfor %}
-            </tbody>
-        </table>
-    {% else %}
-        <p>Nog geen ritten ingevoerd.</p>
-    {% endif %}
-    <h2>Totaal Aantal Gereden Kilometers (iedereen): {{ total_kilometers_all_participants|int }} km</h2>
-    <br>
-    {% if session.logged_in %}
-        <a href="{{ url_for('input_form') }}">Nieuwe Rit Invoeren</a> |
-        <a href="{{ url_for('settings') }}">Instellingen</a> |
-        <a href="{{ url_for('logout') }}">Uitloggen</a>
-    {% else %}
-        <a href="{{ url_for('login') }}">Inloggen om Rit In te Voeren</a>
-    {% endif %}
+            </select>
+            <noscript><button type="submit">Filter</button></noscript>
+        </form>
+
+        {% if db_error %}
+            <p style="color: red; text-align:center;">Database Fout: {{ db_error }}</p>
+        {% endif %}
+
+        {% if entries %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Plaats</th>
+                        <th>Naam</th>
+                        <th>Vossenjacht</th>
+                        <th>Gereden KM</th>
+                        <th>Duur (min)</th>
+                        <th>Start km</th>
+                        <th>Eind km</th>
+                        <th>Aankomsttijd</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in entries %}
+                    <tr class="{% if entry.rank == 1 %}rank-gold{% elif entry.rank == 2 %}rank-silver{% elif entry.rank == 3 %}rank-bronze{% endif %}">
+                        <td>{{ entry.rank }}</td>
+                        <td>{{ entry.name }}</td>
+                        <td>{{ entry.vossenjacht_name }}</td>
+                        <td>{{ entry.calculated_km|int }} km</td>
+                        <td>{{ entry.duration_minutes if entry.duration_minutes is not none else 'N/A' }}{% if entry.duration_minutes is not none %} min{% endif %}</td>
+                        <td>{{ entry.start_km|int }}</td>
+                        <td>{{ entry.end_km|int }}</td>
+                        <td>{{ entry.arrival_time_last_fox }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p style="text-align:center;">Nog geen resultaten voor deze selectie.</p>
+        {% endif %}
+
+        <div class="total-km">
+            Totaal Gereden Kilometers (voor getoonde selectie): {{ total_kilometers_all_participants|int }} km
+        </div>
+
+        <div class="nav-links-bottom">
+            {% if session.user_id %}
+                <a href="{{ url_for('input_form') }}">Nieuwe Rit Invoeren</a> |
+                <a href="{{ url_for('settings') }}">Instellingen / Entries Aanpassen</a>
+            {% else %}
+                <a href="{{ url_for('login') }}">Inloggen om ritten in te voeren of te beheren</a>
+            {% endif %}
+        </div>
+        {% if session.user_id %}
+        <p class="user-info">Ingelogd als: {{ session.username }} ({{ session.role }})</p>
+        {% endif %}
+    </div>
 </body>
 </html>

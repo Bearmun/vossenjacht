@@ -3,20 +3,59 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Vreetvos Beheer</title>
+    <title>Login - Vreetvos Foxhunt</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; background-color: #f4f4f4; color: #333; }
+        header { background-color: #333; color: #fff; padding: 10px 0; text-align: center; margin-bottom: 20px;}
+        header nav a { margin: 0 15px; color: #fff; text-decoration: none; font-weight: bold; }
+        header nav a:hover { text-decoration: underline; }
+        .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); max-width: 450px; margin: 40px auto; }
+        h1 { color: #333; text-align: center; margin-bottom: 20px; }
+        form { display: grid; grid-template-columns: 1fr; gap: 15px; } /* Simplified to single column */
+        label { font-weight: bold; margin-bottom: -5px; /* Pull label closer to input */ }
+        input[type="text"], input[type="password"] { padding: 12px; border: 1px solid #ddd; border-radius: 4px; width: 100%; box-sizing: border-box; font-size: 1rem; }
+        input[type="submit"] { background-color: #007bff; color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; width:100%;}
+        input[type="submit"]:hover { background-color: #0056b3; }
+        .error { color: #721c24; background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 10px; border-radius: 4px; margin-bottom: 20px; text-align:center; }
+        .nav-links-bottom { margin-top: 20px; text-align: center; }
+        .nav-links-bottom a { text-decoration: none; color: #007bff; }
+    </style>
 </head>
 <body>
-    <h1>Inloggen voor Rit Invoer</h1>
-    {% if error %}
-        <p style="color:red;">{{ error }}</p>
-    {% endif %}
-    <form method="post" action="{{ url_for('login') }}">
-        <label for="password">Wachtwoord:</label><br>
-        <input type="password" id="password" name="password" required><br><br>
-        <input type="submit" value="Inloggen">
-    </form>
-    <br>
-    <p><a href="{{ url_for('results') }}">Terug naar Resultaten</a></p>
+    <header>
+        <nav>
+            <a href="{{ url_for('results') }}">Resultaten</a>
+            {# No other links as user is not logged in yet #}
+        </nav>
+    </header>
+
+    <div class="container">
+        <h1>Inloggen Vreetvos</h1>
+        {% if error %}
+            <p class="error">{{ error }}</p>
+        {% endif %}
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                     <p class="error category-{{category}}">{{ message }}</p> {# Using error style for all flashed messages on login page #}
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        <form method="post" action="{{ url_for('login', next=request.args.get('next')) }}">
+            <div>
+                <label for="username">Gebruikersnaam:</label>
+                <input type="text" id="username" name="username" required value="{{ request.form.username if request.form.username else '' }}">
+            </div>
+            <div>
+                <label for="password">Wachtwoord:</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            <input type="submit" value="Inloggen">
+        </form>
+        <div class="nav-links-bottom">
+            <p><a href="{{ url_for('results') }}">Terug naar Resultaten</a></p>
+        </div>
+    </div>
 </body>
 </html>

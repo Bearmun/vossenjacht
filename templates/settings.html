@@ -3,65 +3,145 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Instellingen - Vreetvos Resultaten</title>
+    <title>Instellingen en Rittenbeheer - Vreetvos</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; background-color: #f4f4f4; color: #333; }
+        header { background-color: #333; color: #fff; padding: 10px 0; text-align: center; margin-bottom: 20px;}
+        header nav a { margin: 0 15px; color: #fff; text-decoration: none; font-weight: bold; }
+        header nav a:hover { text-decoration: underline; }
+        .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); width: 95%; max-width: 1400px; margin: auto; }
+        h1, h2 { color: #333; text-align: center; }
+        h2.sub-header { margin-top: 30px; margin-bottom:15px; border-bottom: 1px solid #ccc; padding-bottom:10px;}
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 0.95em; }
+        th { background-color: #e9ecef; }
+        tr:nth-child(even) { background-color: #f8f9fa; }
+        .actions a, .actions input[type="submit"] {
+            display: inline-block;
+            padding: 8px 12px; /* Adjusted padding */
+            margin-right: 5px;
+            margin-bottom: 5px; /* Added margin for wrapped buttons */
+            border-radius: 4px;
+            text-decoration: none;
+            font-size: 0.85em; /* Adjusted font size */
+            cursor: pointer;
+            text-align: center;
+        }
+        .actions a { background-color: #ffc107; color: #212529; border: 1px solid #ffc107; min-width:60px;}
+        .actions a:hover { background-color: #e0a800; }
+        .actions input[type="submit"] { background-color: #dc3545; color: white; border: 1px solid #dc3545; min-width:80px;}
+        .actions input[type="submit"]:hover { background-color: #c82333; }
+        hr { margin: 30px 0; }
+        .db-management { padding: 20px; background-color: #fff3cd; border: 1px solid #ffeeba; border-radius: 8px; margin-top:30px; }
+        .db-management h3 { color: #856404; margin-top:0;}
+        .db-management label { font-weight: bold; display: block; margin-bottom: 8px; }
+        .db-management input[type="text"] { padding: 10px; border: 1px solid #ced4da; border-radius: 4px; width: 280px; margin-right:10px; margin-bottom:10px;}
+        .db-management input[type="submit"] { background-color: #e60000; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-weight:bold; }
+        .db-management input[type="submit"]:hover { background-color: #cc0000; }
+        .nav-links-bottom { margin-top: 30px; text-align: center; padding-top: 20px; border-top: 1px solid #eee; }
+        .nav-links-bottom a { margin: 0 15px; text-decoration: none; color: #007bff; font-weight: bold; }
+        .user-info { text-align: center; margin-top: 15px; color: #6c757d; font-size: 0.9em; }
+        .no-entries {text-align:center; color: #6c757d; font-style: italic; margin-top:20px;}
+    </style>
 </head>
 <body>
-    <h1>Instellingen</h1>
-    <p><a href="{{ url_for('results') }}">Terug naar Resultaten</a> | <a href="{{ url_for('input_form') }}">Nieuwe Rit Invoeren</a> | <a href="{{ url_for('logout') }}">Uitloggen</a></p>
+    <header>
+        <nav>
+            <a href="{{ url_for('results') }}">Resultaten</a>
+            {% if session.user_id %}
+            <a href="{{ url_for('input_form') }}">Nieuwe Rit</a>
+            <a href="{{ url_for('list_vossenjachten_page') }}">Vossenjachten</a>
+            <a href="{{ url_for('settings') }}">Instellingen/Entries</a>
+                {% if session.role == 'admin' %}
+            <a href="{{ url_for('manage_users_page') }}">User Management</a>
+                {% endif %}
+            <a href="{{ url_for('logout') }}">Uitloggen ({{ session.username }})</a>
+            {% else %}
+            <a href="{{ url_for('login') }}">Inloggen</a>
+            {% endif %}
+        </nav>
+    </header>
 
-    <h2>Huidige Ritten</h2>
-    {% if entries %}
-        <table class="settings-table"> <!-- Added a class for potential specific styling -->
+    <div class="container">
+        <h1>Instellingen en Rittenbeheer</h1>
+
+        <h2 class="sub-header">
+            {% if session.role == 'moderator' %}
+                Ritten voor Vossenjachten gemaakt door {{ session.username }}
+            {% elif session.role == 'admin' %}
+                Alle Ritten (Admin View)
+            {% else %}
+                Mijn Inzendingen (View-Only) {# Fallback, though settings route is login_required #}
+            {% endif %}
+        </h2>
+
+        {% if entries %}
+        <table>
             <thead>
                 <tr>
                     <th>Plaats</th>
-                    <th>Naam</th>
-                    <th>Gereden KM</th>
-                    <th>Duur (min)</th>
-                    <th>Begin KM</th>
-                    <th>Eind KM</th>
+                    <th>Naam Deelnemer</th>
+                    <th>Vossenjacht</th>
+                    <th>Start km</th>
+                    <th>Eind km</th>
+                    <th>Gereden km</th>
                     <th>Aankomsttijd</th>
-                    <th>Acties</th> <!-- Uncommented and added -->
-                    <th>Verwijderen</th>
+                    <th>Duur (min)</th>
+                    <th>Acties</th>
                 </tr>
             </thead>
             <tbody>
                 {% for entry in entries %}
                 <tr>
-                    <td>{{ entry['rank'] }}</td>
-                    <td>{{ entry['name'] }}</td>
-                    <td>{{ entry['calculated_km']|int }}</td>
-                    <td>{{ entry['duration_minutes']|int }}</td>
-                    <td>{{ entry['start_km']|int }}</td>
-                    <td>{{ entry['end_km']|int }}</td>
-                    <td>{{ entry['arrival_time_last_fox'] }}</td>
-                    <td>
-                        <a href="{{ url_for('edit_entry', entry_id=entry.id) }}" class="button-link-edit">Bewerk</a>
-                    </td>
-                    <td>
-                        <form method="POST" action="{{ url_for('delete_entry', entry_id=entry.id) }}" style="display:inline;" onsubmit="return confirm('Weet je zeker dat je deze rit wilt verwijderen?');">
-                            <input type="submit" value="Verwijder" class="button-link-delete">
-                        </form>
+                    <td>{{ entry.rank }}</td>
+                    <td>{{ entry.name }}</td>
+                    <td>{{ entry.vossenjacht_name }}</td>
+                    <td>{{ entry.start_km|int }}</td>
+                    <td>{{ entry.end_km|int }}</td>
+                    <td>{{ entry.calculated_km|int }}</td>
+                    <td>{{ entry.arrival_time_last_fox }}</td>
+                    <td>{{ entry.duration_minutes }}</td>
+                    <td class="actions">
+                        {# Permission to edit/delete entries is checked in the route,
+                           but we only show links if user is mod/admin for clarity #}
+                        {% if session.role in ['admin', 'moderator'] %}
+                            <a href="{{ url_for('edit_entry', entry_id=entry.id) }}">Aanpassen</a>
+                            <form action="{{ url_for('delete_entry', entry_id=entry.id) }}" method="post" style="display:inline;" onsubmit="return confirm('Weet je zeker dat je deze rit wilt verwijderen?');">
+                                <input type="submit" value="Verwijderen">
+                            </form>
+                        {% else %}
+                            N.v.t.
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
-    {% else %}
-        <p>Geen ritten in de database.</p>
-    {% endif %}
+        {% else %}
+        <p class="no-entries">Geen ritten gevonden voor deze selectie.</p>
+        {% endif %}
 
-        <hr style="margin-top: 30px; margin-bottom: 20px;">
-        <h2>Database Beheer</h2>
-        <div style="border: 1px solid red; padding: 15px; background-color: #ffeeee;">
-            <h3 style="color: red; margin-top: 0;">Verwijder Alle Ritten</h3>
+        {% if session.role == 'admin' %}
+        <hr>
+        <div class="db-management">
+            <h2 class="sub-header">Database Beheer (Admin Only)</h2>
+            <h3>Verwijder Alle Ritten</h3>
             <p style="color:red; font-weight:bold;">WAARSCHUWING: Deze actie kan niet ongedaan worden gemaakt en zal ALLE ritten permanent uit de database verwijderen!</p>
             <form method="POST" action="{{ url_for('clear_database') }}" onsubmit="return confirm('LET OP: Alle ritten worden permanent verwijderd! Weet je het ZEKER?');">
                 <label for="confirm_text_clear_all">Om te bevestigen dat je alle ritten wilt verwijderen, typ "<strong>VERWIJDER ALLES</strong>" in het onderstaande veld:</label><br>
                 <input type="text" name="confirm_text" id="confirm_text_clear_all" required pattern="VERWIJDER ALLES" title="Typ exact 'VERWIJDER ALLES' om te bevestigen."><br><br>
-                <input type="submit" value="Verwijder Alle Ritten Definitief" style="background-color:#dc3545; color:white; padding:10px 15px; border:none; border-radius:4px; cursor:pointer;">
+                <input type="submit" value="Verwijder Alle Ritten Definitief">
             </form>
         </div>
+        {% endif %}
+
+        <div class="nav-links-bottom">
+            <a href="{{ url_for('results') }}">Terug naar Resultaten</a>
+        </div>
+         {% if session.user_id %}
+        <p class="user-info">Ingelogd als: {{ session.username }} ({{ session.role }})</p>
+        {% endif %}
+    </div>
 </body>
 </html>

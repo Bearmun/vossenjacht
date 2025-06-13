@@ -4,13 +4,12 @@ from flask import Flask, render_template, request, redirect, url_for, g, current
 from datetime import datetime
 import os # Import os module
 from functools import wraps # Added wraps
+from werkzeug.security import check_password_hash, generate_password_hash
 
 app = Flask(__name__)
 
 # Secret key for session management - IMPORTANT: set via ENV for production
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', os.urandom(24))
-# Admin password - IMPORTANT: set via ENV for production
-app.config['VREETVOS_ADMIN_PASSWORD'] = os.environ.get('VREETVOS_ADMIN_PASSWORD', 'vreetvos_admin')
 
 # Determine database path: prioritize DATABASE_PATH env var, then default.
 database_actual_path = os.environ.get('DATABASE_PATH', 'foxhunt.db')
@@ -23,6 +22,7 @@ def get_db():
         db_path = current_app.config.get('DATABASE', current_app.config['DATABASE_FILENAME'])
         g.db = sqlite3.connect(db_path, detect_types=sqlite3.PARSE_DECLTYPES)
         g.db.row_factory = sqlite3.Row
+        g.db.execute("PRAGMA foreign_keys = ON;") # Enforce FKs for every connection
     return g.db
 
 def close_db(e=None):
@@ -32,9 +32,27 @@ def close_db(e=None):
 
 def init_db():
     db = get_db()
-    # Use executescript for CREATE TABLE IF NOT EXISTS to be safe,
-    # though a single execute would also work for a single statement.
+    # Enable foreign key support
+    db.execute("PRAGMA foreign_keys = ON;")
     db.executescript('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL CHECK (role IN ('admin', 'moderator'))
+        );
+
+        CREATE TABLE IF NOT EXISTS vossenjachten (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            creation_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            creator_id INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'completed')),
+            type TEXT NOT NULL CHECK (type IN ('kilometers', 'time', 'both')),
+            start_time TEXT, -- New column
+            FOREIGN KEY (creator_id) REFERENCES users (id)
+        );
+
         CREATE TABLE IF NOT EXISTS entries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -42,14 +60,13 @@ def init_db():
             end_km REAL NOT NULL,
             arrival_time_last_fox TEXT NOT NULL,
             calculated_km REAL NOT NULL,
-            duration_minutes INTEGER NOT NULL
+            duration_minutes INTEGER NOT NULL,
+            vossenjacht_id INTEGER,
+            user_id INTEGER,
+            FOREIGN KEY (vossenjacht_id) REFERENCES vossenjachten (id),
+            FOREIGN KEY (user_id) REFERENCES users (id)
         );
     ''')
-    # No explicit commit is strictly needed for CREATE TABLE IF NOT EXISTS
-    # when autocommit is often on or if it's the only command.
-    # However, keeping db.commit() doesn't harm and ensures it if other
-    # schema modifications were added later in the same transaction.
-    # For simplicity and safety, let's keep the commit.
     db.commit()
 
 @click.command('init-db')
@@ -64,11 +81,35 @@ def init_app(flask_app):
 init_app(app)
 
 # Login required decorator
+def set_password(password):
+    return generate_password_hash(password)
+
+# Login required decorator
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not session.get('logged_in'):
+        if not session.get('user_id'):
             return redirect(url_for('login', next=request.url))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# Admin required decorator
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if session.get('role') != 'admin':
+            # flash('Admin access required.', 'danger') # Assuming you have flash messaging
+            return redirect(url_for('results')) # Or some other appropriate page
+        return f(*args, **kwargs)
+    return decorated_function
+
+# Moderator required decorator
+def moderator_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if session.get('role') not in ['admin', 'moderator']:
+            # flash('Moderator or Admin access required.', 'danger') # Assuming you have flash messaging
+            return redirect(url_for('results')) # Or some other appropriate page
         return f(*args, **kwargs)
     return decorated_function
 
@@ -77,8 +118,18 @@ def login_required(f):
 def login():
     error = None
     if request.method == 'POST':
-        if request.form['password'] == current_app.config['VREETVOS_ADMIN_PASSWORD']:
-            session['logged_in'] = True
+        username = request.form['username']
+        password = request.form['password']
+        db = get_db()
+        user = db.execute(
+            'SELECT * FROM users WHERE username = ?', (username,)
+        ).fetchone()
+
+        if user and check_password_hash(user['password_hash'], password):
+            session.clear() # Clear old session data
+            session['user_id'] = user['id']
+            session['username'] = user['username']
+            session['role'] = user['role']
             next_url = request.args.get('next')
             # Basic protection against open redirect
             if next_url and ':' not in next_url and '@' not in next_url and '.' in next_url.split('/')[-1]: # very basic check
@@ -90,12 +141,14 @@ def login():
                     return redirect(next_url)
             return redirect(url_for('input_form')) # Default redirect
         else:
-            error = 'Ongeldig wachtwoord. Probeer opnieuw.'
+            error = 'Ongeldige gebruikersnaam of wachtwoord. Probeer opnieuw.'
     return render_template('login.html', error=error)
 
 @app.route('/logout')
 def logout():
-    session.pop('logged_in', None)
+    session.pop('user_id', None)
+    session.pop('username', None)
+    session.pop('role', None)
     return redirect(url_for('results'))
 
 @app.route('/')
@@ -105,60 +158,96 @@ def index():
 @app.route('/input')
 @login_required # Protect this route
 def input_form():
-    # Get current time formatted as HH:MM for pre-filling the form
     now = datetime.now()
     current_time_str = now.strftime('%H:%M')
-    return render_template('input.html', current_time_for_form=current_time_str)
+    db = get_db()
+    active_vossenjachten = db.execute(
+        "SELECT id, name FROM vossenjachten WHERE status = 'active' ORDER BY name"
+    ).fetchall()
+    # return render_template('input.html', current_time_for_form=current_time_str, active_vossenjachten=active_vossenjachten)
+    return f"Placeholder for input form. Active Vossenjachten: {[(vj['id'], vj['name']) for vj in active_vossenjachten]}"
 
 @app.route('/add_entry', methods=['POST'])
 @login_required # Protect this route
 def add_entry():
     try:
         name = request.form['name']
-        start_km = int(float(request.form['start_km'])) # Handle potential float input (e.g. "10.0") then cast to int
-        end_km = int(float(request.form['end_km']))     # Handle potential float input then cast to int
+        start_km = int(float(request.form['start_km']))
+        end_km = int(float(request.form['end_km']))
         arrival_time_str = request.form['arrival_time_last_fox']
+        vossenjacht_id = request.form.get('vossenjacht_id', type=int)
 
-        max_odom_reading = int(current_app.config.get('MAX_ODOMETER_READING', 1000)) # Ensure int
+        if not vossenjacht_id:
+            # flash('Vossenjacht selection is required.', 'danger')
+            return redirect(url_for('input_form')) # Or return error string
+
+        # Fetch and check vossenjacht status
+        vossenjacht_for_entry = get_vossenjacht_or_abort(vossenjacht_id, check_owner=False) # Renamed to avoid conflict with 'vossenjacht' from edit route context
+        if vossenjacht_for_entry['status'] != 'active':
+            # flash('Selected vossenjacht is not active.', 'danger')
+            return "Error: Selected Vossenjacht is not active. <a href='/input'>Try again</a>"
+
+        if not vossenjacht_for_entry['start_time']:
+            # flash('Selected vossenjacht does not have a configured start time.', 'danger')
+            # return redirect(url_for('input_form'))
+            return "Error: Selected Vossenjacht does not have a start time. <a href='/input'>Try again</a>"
+
+        max_odom_reading = int(current_app.config.get('MAX_ODOMETER_READING', 1000))
         actual_end_km = end_km
         if end_km < start_km: # Odometer rollover
             actual_end_km += max_odom_reading
-
-        calculated_km = int(round(actual_end_km - start_km)) # Calculate as int
+        calculated_km = int(round(actual_end_km - start_km))
 
         if calculated_km < 0:
+            # flash('Negative calculated kilometers. Check odometer readings.', 'danger')
             print(f"Warning: Negative calculated_km for {name}. Start: {start_km}, End: {end_km}. Adjusted End: {actual_end_km}")
             return redirect(url_for('input_form'))
 
-        try:
-            arrival_dt = datetime.strptime(arrival_time_str, '%H:%M')
-            start_dt = datetime.strptime('12:00', '%H:%M')
-            duration_delta = arrival_dt - start_dt
-            duration_minutes = int(duration_delta.total_seconds() / 60)
-        except ValueError:
-            print(f"Error: Invalid time format for {name}. Time: {arrival_time_str}")
-            return redirect(url_for('input_form'))
+        # Use Vossenjacht's specific start_time for duration calculation
+        arrival_dt = datetime.strptime(arrival_time_str, '%H:%M')
+        vj_start_time_dt = datetime.strptime(vossenjacht_for_entry['start_time'], '%H:%M')
+        duration_delta = arrival_dt - vj_start_time_dt
+        duration_minutes = int(duration_delta.total_seconds() / 60)
 
+        user_id = session['user_id']
         db = get_db()
         db.execute(
-            'INSERT INTO entries (name, start_km, end_km, arrival_time_last_fox, calculated_km, duration_minutes)'
-            ' VALUES (?, ?, ?, ?, ?, ?)',
-            (name, start_km, end_km, arrival_time_str, calculated_km, duration_minutes)
+            'INSERT INTO entries (name, start_km, end_km, arrival_time_last_fox, calculated_km, duration_minutes, vossenjacht_id, user_id)'
+            ' VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            (name, start_km, end_km, arrival_time_str, calculated_km, duration_minutes, vossenjacht_id, user_id)
         )
         db.commit()
+        # flash('Entry added successfully!', 'success')
         return redirect(url_for('results'))
 
-    except ValueError: # For float conversion errors
-        print("Error: Non-numeric input for kilometer fields.")
+    except ValueError: # For float conversion or time parsing errors
+        # flash('Invalid data submitted. Check kilometer fields and time format.', 'danger')
+        print("Error: Non-numeric input for kilometer fields or invalid time format.")
+        return redirect(url_for('input_form'))
+    except sqlite3.Error as e:
+        # flash(f'Database error: {e}', 'danger')
+        print(f"Database error in add_entry: {e}")
         return redirect(url_for('input_form'))
     except Exception as e:
+        # flash(f'An unexpected error occurred: {e}', 'danger')
         print(f"An error occurred in add_entry: {e}")
         return redirect(url_for('input_form'))
 
 @app.route('/results')
 def results():
     db = get_db()
-    entries_rows = db.execute('SELECT * FROM entries').fetchall()
+    selected_vj_id = request.args.get('vj_id', type=int)
+
+    all_vossenjachten = db.execute("SELECT id, name FROM vossenjachten ORDER BY name").fetchall()
+
+    base_query = "SELECT e.*, vj.name as vossenjacht_name FROM entries e JOIN vossenjachten vj ON e.vossenjacht_id = vj.id"
+    params = []
+
+    if selected_vj_id:
+        base_query += " WHERE e.vossenjacht_id = ?"
+        params.append(selected_vj_id)
+
+    entries_rows = db.execute(base_query, params).fetchall()
 
     sorted_entries = sorted(entries_rows, key=lambda x: (x['calculated_km'], x['duration_minutes']))
 
@@ -166,15 +255,14 @@ def results():
     last_score = None
     current_dense_rank = 0
     if sorted_entries:
-        for entry in sorted_entries:
-            current_score = (entry['calculated_km'], entry['duration_minutes'])
+        for entry_row in sorted_entries: # Changed from 'entry' to 'entry_row' to avoid conflict
+            current_score = (entry_row['calculated_km'], entry_row['duration_minutes'])
             if current_score != last_score:
                 current_dense_rank += 1
                 last_score = current_score
 
-            mutable_entry = dict(entry)
+            mutable_entry = dict(entry_row) # Use entry_row here
             mutable_entry['rank'] = current_dense_rank
-            # Ensure km values are integers for the template
             mutable_entry['start_km'] = int(mutable_entry['start_km'])
             mutable_entry['end_km'] = int(mutable_entry['end_km'])
             mutable_entry['calculated_km'] = int(mutable_entry['calculated_km'])
@@ -182,118 +270,161 @@ def results():
 
     total_kilometers_all = int(sum(entry['calculated_km'] for entry in ranked_entries_with_dense_rank))
 
-    return render_template('results.html', entries=ranked_entries_with_dense_rank, total_kilometers_all_participants=int(total_kilometers_all))
+    current_vossenjacht_name = None
+    current_vossenjacht_type = None # Initialize type
+    if selected_vj_id:
+        # Fetch details for the selected vossenjacht to get its type
+        vj_details = db.execute("SELECT name, type FROM vossenjachten WHERE id = ?", (selected_vj_id,)).fetchone()
+        if vj_details:
+            current_vossenjacht_name = vj_details['name']
+            current_vossenjacht_type = vj_details['type']
+
+    # Conditional sorting logic
+    if selected_vj_id and current_vossenjacht_type:
+        if current_vossenjacht_type == 'time':
+            sorted_entries = sorted(entries_rows, key=lambda x: (x['duration_minutes'], x['calculated_km']))
+            def get_score(entry): return (entry['duration_minutes'], entry['calculated_km'])
+        else:  # 'kilometers' or 'both'
+            sorted_entries = sorted(entries_rows, key=lambda x: (x['calculated_km'], x['duration_minutes']))
+            def get_score(entry): return (entry['calculated_km'], entry['duration_minutes'])
+    else:  # Global view or if vj_id provided but type couldn't be fetched
+        sorted_entries = sorted(entries_rows, key=lambda x: (x['calculated_km'], x['duration_minutes']))
+        def get_score(entry): return (entry['calculated_km'], entry['duration_minutes'])
+
+    # Re-calculate ranked_entries_with_dense_rank based on the new sorting and scoring
+    ranked_entries_with_dense_rank = [] # Clear previous calculation if any
+    last_score = None
+    current_dense_rank = 0
+    if sorted_entries:
+        for entry_row in sorted_entries:
+            current_score = get_score(entry_row) # Use the dynamically defined get_score
+            if current_score != last_score:
+                current_dense_rank += 1
+                last_score = current_score
+
+            mutable_entry = dict(entry_row)
+            mutable_entry['rank'] = current_dense_rank
+            mutable_entry['start_km'] = int(mutable_entry['start_km'])
+            mutable_entry['end_km'] = int(mutable_entry['end_km'])
+            mutable_entry['calculated_km'] = int(mutable_entry['calculated_km'])
+            ranked_entries_with_dense_rank.append(mutable_entry)
+
+    total_kilometers_all = int(sum(entry['calculated_km'] for entry in ranked_entries_with_dense_rank))
+
+
+    return render_template('results.html',
+                           entries=ranked_entries_with_dense_rank,
+                           total_kilometers_all_participants=int(total_kilometers_all),
+                           all_vossenjachten=all_vossenjachten, # Already fetched
+                           selected_vj_id=selected_vj_id,
+                           current_vossenjacht_name=current_vossenjacht_name,
+                           current_vossenjacht_type=current_vossenjacht_type, # Pass type to template for info
+                           title="Results")
 
 # Add this new route in app.py
 @app.route('/settings')
 @login_required
 def settings():
     db = get_db()
-    # Fetch entries, similar to /results.
-    entries_rows = db.execute('SELECT * FROM entries ORDER BY calculated_km ASC, duration_minutes ASC').fetchall()
+    entries_query_sql = "SELECT e.*, vj.name as vossenjacht_name FROM entries e JOIN vossenjachten vj ON e.vossenjacht_id = vj.id"
+    params = []
 
+    if session.get('role') == 'moderator':
+        entries_query_sql += " WHERE vj.creator_id = ?"
+        params.append(session['user_id'])
+
+    entries_query_sql += " ORDER BY e.calculated_km ASC, e.duration_minutes ASC"
+
+    entries_rows = db.execute(entries_query_sql, params).fetchall()
     entries_list = [dict(row) for row in entries_rows]
 
-    # Re-use ranking logic from /results route for consistency
     ranked_entries = []
     last_score = None
     current_dense_rank = 0
-    if entries_list: # Ensure there are entries before trying to rank
-        for entry_data in entries_list: # Renamed to avoid conflict with outer 'entry' if copy-pasting
-            # Ensure numeric fields are integers for consistent display/logic
+    if entries_list:
+        for entry_data in entries_list:
             entry_data['start_km'] = int(entry_data['start_km'])
             entry_data['end_km'] = int(entry_data['end_km'])
             entry_data['calculated_km'] = int(entry_data['calculated_km'])
             entry_data['duration_minutes'] = int(entry_data['duration_minutes'])
-
             current_score = (entry_data['calculated_km'], entry_data['duration_minutes'])
             if current_score != last_score:
                 current_dense_rank += 1
                 last_score = current_score
-
-            mutable_entry = dict(entry_data) # Already a dict, but ensures it's a mutable copy
+            mutable_entry = dict(entry_data)
             mutable_entry['rank'] = current_dense_rank
             ranked_entries.append(mutable_entry)
 
-    return render_template('settings.html', entries=ranked_entries)
+    # return render_template('settings.html', entries=ranked_entries)
+    return f"Placeholder for settings page. Entries (count: {len(ranked_entries)}): {ranked_entries}"
+
+
+def check_entry_permission(entry_id):
+    db = get_db()
+    entry = db.execute('SELECT * FROM entries WHERE id = ?', (entry_id,)).fetchone()
+    if not entry:
+        abort(404) # Entry not found
+
+    vossenjacht = get_vossenjacht_or_abort(entry['vossenjacht_id'], check_owner=False) # Get VJ without owner check first
+
+    if session.get('role') == 'admin':
+        return entry, vossenjacht # Admin has permission
+
+    if session.get('role') == 'moderator':
+        if vossenjacht['creator_id'] == session.get('user_id'):
+            return entry, vossenjacht # Moderator owns the Vossenjacht
+        else:
+            abort(403) # Moderator does not own the Vossenjacht
+
+    # If user is not admin or moderator who owns the VJ, they don't have permission
+    # This could be expanded if regular users were allowed to edit/delete their own entries
+    abort(403)
+
 
 @app.route('/delete_entry/<int:entry_id>', methods=['POST'])
 @login_required
 def delete_entry(entry_id):
+    check_entry_permission(entry_id) # Will abort if no permission
+
     db = get_db()
-    # Check if entry exists before deleting (optional, but good practice)
-    entry = db.execute('SELECT id FROM entries WHERE id = ?', (entry_id,)).fetchone()
-    if entry:
-        db.execute('DELETE FROM entries WHERE id = ?', (entry_id,))
-        db.commit()
-        # Optionally, add a flash message here: flash('Rit succesvol verwijderd.', 'success')
-    # else:
-        # Optionally, flash an error if entry not found: flash('Rit niet gevonden.', 'error')
-    # else:
-        # Optionally, flash an error if entry not found: flash('Rit niet gevonden.', 'error')
+    db.execute('DELETE FROM entries WHERE id = ?', (entry_id,))
+    db.commit()
+    # flash('Entry deleted successfully.', 'success')
     return redirect(url_for('settings'))
 
-@app.route('/edit_entry/<int:entry_id>', methods=['GET', 'POST']) # Added 'POST'
+@app.route('/edit_entry/<int:entry_id>', methods=['GET', 'POST'])
 @login_required
 def edit_entry(entry_id):
-    db = get_db()
-    # Fetch existing entry for GET or if POST fails and needs to re-render form
-    entry_data = db.execute(
-        'SELECT id, name, start_km, end_km, arrival_time_last_fox '
-        'FROM entries WHERE id = ?',
-        (entry_id,)
-    ).fetchone()
+    entry_data, _ = check_entry_permission(entry_id) # Will abort if no permission
 
-    if entry_data is None:
-        # flash('Rit niet gevonden.', 'error')
-        return redirect(url_for('settings'))
-
-    # Convert to mutable dict for form pre-filling and potential re-render
     entry_dict = dict(entry_data)
-    # Ensure km fields are int for form pre-filling (on GET or if POST fails)
     entry_dict['start_km'] = int(entry_dict['start_km'])
     entry_dict['end_km'] = int(entry_dict['end_km'])
 
-
     if request.method == 'POST':
         try:
-            # Retrieve and process form data
             name = request.form['name']
             start_km = int(float(request.form['start_km']))
             end_km = int(float(request.form['end_km']))
             arrival_time_str = request.form['arrival_time_last_fox']
 
-            # Recalculate driven_km and duration
             max_odom_reading = int(current_app.config.get('MAX_ODOMETER_READING', 1000))
             actual_end_km = end_km
             if end_km < start_km:  # Odometer rollover
                 actual_end_km += max_odom_reading
-
             calculated_km = int(round(actual_end_km - start_km))
 
             if calculated_km < 0:
-                # flash('Negatieve gereden kilometers na aanpassing. Controleer de kilometerstanden.', 'error')
-                # Re-render form with error and existing (modified by user) data
-                # For this, we need to pass back the current form values, not just original entry_dict
-                form_data_for_template = {
-                    'id': entry_id, # Keep id for the form action
-                    'name': name,
-                    'start_km': start_km,
-                    'end_km': end_km,
-                    'arrival_time_last_fox': arrival_time_str
-                }
-                # return render_template('edit_entry.html', entry=form_data_for_template, error='Negatieve berekende kilometers.')
-                # Simpler for now: redirect to GET, losing user's invalid input but avoiding complex error render
-                print(f"Warning: Negative calculated_km for entry {entry_id} edit. User input: Name={name}, StartKM={start_km}, EndKM={end_km}")
-                return redirect(url_for('edit_entry', entry_id=entry_id))
-
+                # flash('Negative calculated kilometers. Check odometer readings.', 'danger')
+                # return render_template('edit_entry.html', entry=entry_dict, error='Negative calculated kilometers.')
+                return f"Error: Negative calculated km. <a href='{url_for('edit_entry', entry_id=entry_id)}'>Try again</a>"
 
             arrival_dt = datetime.strptime(arrival_time_str, '%H:%M')
-            start_dt = datetime.strptime('12:00', '%H:%M')
+            start_dt = datetime.strptime('12:00', '%H:%M') # Assuming fixed start time for duration
             duration_delta = arrival_dt - start_dt
             duration_minutes = int(duration_delta.total_seconds() / 60)
 
-            # Update database
+            db = get_db()
             db.execute(
                 'UPDATE entries SET name = ?, start_km = ?, end_km = ?, '
                 'arrival_time_last_fox = ?, calculated_km = ?, duration_minutes = ? '
@@ -301,24 +432,21 @@ def edit_entry(entry_id):
                 (name, start_km, end_km, arrival_time_str, calculated_km, duration_minutes, entry_id)
             )
             db.commit()
-            # flash('Rit succesvol bijgewerkt.', 'success')
+            # flash('Entry updated successfully.', 'success')
             return redirect(url_for('settings'))
 
-        except ValueError: # For float/int conversion or time parsing errors
-            # flash('Ongeldige invoer. Controleer de velden.', 'error')
-            # Re-render form with an error and original data (or redirect to GET)
-            # For simplicity, redirect to GET which re-fetches original data.
-            # A more advanced implementation would re-render with user's (invalid) data.
-            print(f"ValueError during edit for entry {entry_id}: Likely invalid number or time format.")
-            return redirect(url_for('edit_entry', entry_id=entry_id))
+        except ValueError:
+            # flash('Invalid data. Check fields.', 'danger')
+            # return render_template('edit_entry.html', entry=entry_dict, error='Invalid data.')
+            return f"Error: Invalid data. <a href='{url_for('edit_entry', entry_id=entry_id)}'>Try again</a>"
         except Exception as e:
-            # Log the exception e
+            # flash(f'Error updating entry: {e}', 'danger')
             print(f"Error updating entry {entry_id}: {e}")
-            # flash('Er is een fout opgetreden bij het bijwerken.', 'error')
             return redirect(url_for('edit_entry', entry_id=entry_id))
 
-    # For GET request, or if POST had an error and redirected to GET:
-    return render_template('edit_entry.html', entry=entry_dict)
+    # GET request
+    # return render_template('edit_entry.html', entry=entry_dict)
+    return f"Placeholder for edit entry form. Entry ID: {entry_id}, Data: {entry_dict}"
 
 @app.route('/clear_database', methods=['POST'])
 @login_required
@@ -341,6 +469,231 @@ def clear_database():
         print(f"Database clear attempt failed due to incorrect confirmation text: '{confirmation_text}'") # Server log
 
     return redirect(url_for('settings'))
+
+# User Management Routes
+@app.route('/admin/users')
+@login_required
+@admin_required
+def manage_users_page():
+    db = get_db()
+    users_data = db.execute("SELECT id, username, role FROM users ORDER BY username").fetchall()
+    return render_template('admin/manage_users.html', users=users_data, title="Manage Users")
+
+@app.route('/admin/users/add', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def add_user_page():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        role = request.form['role']
+        error = None
+
+        if not username or not password:
+            error = "Username and password are required."
+        elif role not in ['admin', 'moderator']:
+            error = "Invalid role specified."
+
+        if error:
+            return render_template('admin/add_user.html', error=error, username=username, role=role, title="Add New User")
+
+        db = get_db()
+        existing_user = db.execute('SELECT id FROM users WHERE username = ?', (username,)).fetchone()
+        if existing_user:
+            error = "Username already exists."
+            return render_template('admin/add_user.html', error=error, username=username, role=role, title="Add New User")
+
+        hashed_password = generate_password_hash(password)
+        try:
+            db.execute('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)',
+                       (username, hashed_password, role))
+            db.commit()
+            # flash('User added successfully.', 'success') # Optional: add flash messaging
+            return redirect(url_for('manage_users_page'))
+        except sqlite3.Error as e:
+            error = f"Database error: {e}"
+            return render_template('admin/add_user.html', error=error, username=username, role=role, title="Add New User")
+
+    # GET request
+    return render_template('admin/add_user.html', title="Add New User")
+
+@app.route('/admin/users/delete/<int:user_id>', methods=['POST'])
+@login_required
+@admin_required
+def delete_user_page(user_id):
+    if session.get('user_id') == user_id:
+        # flash("You cannot delete your own account.", 'danger')
+        return redirect(url_for('manage_users_page'))
+
+    db = get_db()
+    # Check if user exists before attempting delete
+    user_to_delete = db.execute('SELECT id FROM users WHERE id = ?', (user_id,)).fetchone()
+    if user_to_delete:
+        db.execute('DELETE FROM users WHERE id = ?', (user_id,))
+        db.commit()
+        # flash('User deleted successfully.', 'success')
+    # else:
+        # flash('User not found.', 'warning')
+    return redirect(url_for('manage_users_page'))
+
+# Helper function for Vossenjacht access
+from flask import abort
+
+def get_vossenjacht_or_abort(vj_id, check_owner=True):
+    db = get_db()
+    vossenjacht = db.execute(
+        'SELECT vj.*, u.username as creator_username FROM vossenjachten vj JOIN users u ON vj.creator_id = u.id WHERE vj.id = ?',
+        (vj_id,)
+    ).fetchone()
+
+    if vossenjacht is None:
+        abort(404)  # Not found
+
+    if check_owner and session.get('role') == 'moderator':
+        if vossenjacht['creator_id'] != session.get('user_id'):
+            abort(403)  # Forbidden
+
+    # Admins bypass the owner check if check_owner is True but role is admin
+    # No explicit check needed here for admin, as they are not 'moderator' role for the above condition.
+
+    return vossenjacht
+
+# Vossenjacht Management Routes
+@app.route('/vossenjachten')
+@login_required
+def list_vossenjachten_page():
+    db = get_db()
+    # Fetch all vossenjachten, joining with users to get creator's username
+    vossenjachten = db.execute(
+        'SELECT vj.id, vj.name, vj.creation_date, vj.status, vj.type, u.username as creator_username '
+        'FROM vossenjachten vj JOIN users u ON vj.creator_id = u.id ORDER BY vj.creation_date DESC'
+    ).fetchall()
+    # Fetch all vossenjachten, joining with users to get creator's username
+    vossenjachten_data = db.execute(
+        'SELECT vj.id, vj.name, vj.creation_date, vj.status, vj.type, u.username as creator_username, vj.creator_id '
+        'FROM vossenjachten vj JOIN users u ON vj.creator_id = u.id ORDER BY vj.creation_date DESC'
+    ).fetchall()
+    return render_template('vossenjacht/list_vossenjachten.html', vossenjachten=vossenjachten_data, title="Vossenjachten Overview")
+
+@app.route('/vossenjachten/new', methods=['GET', 'POST'])
+@login_required
+@moderator_required # Moderators and Admins can create
+def create_vossenjacht_page():
+    if request.method == 'POST':
+        name = request.form.get('name')
+        type = request.form.get('type')
+        start_time_str = request.form.get('start_time')
+        error = None
+
+        if not name:
+            error = "Name is required."
+        elif type not in ['kilometers', 'time', 'both']:
+            error = "Invalid vossenjacht type specified."
+        elif not start_time_str:
+            error = "Start time is required."
+        else:
+            try:
+                datetime.strptime(start_time_str, '%H:%M')
+            except ValueError:
+                error = "Invalid start time format. Use HH:MM."
+
+        if error:
+            return render_template('vossenjacht/create_vossenjacht.html', error=error, name=name, type=type, start_time=start_time_str, title="Create Vossenjacht")
+
+        creator_id = session['user_id']
+        db = get_db()
+        try:
+            db.execute(
+                'INSERT INTO vossenjachten (name, type, creator_id, start_time) VALUES (?, ?, ?, ?)',
+                (name, type, creator_id, start_time_str)
+            )
+            db.commit()
+            # flash('Vossenjacht created successfully!', 'success')
+            return redirect(url_for('list_vossenjachten_page'))
+        except sqlite3.Error as e:
+            error = f"Database error: {e}"
+            return render_template('vossenjacht/create_vossenjacht.html', error=error, name=name, type=type, start_time=start_time_str, title="Create Vossenjacht")
+    # GET request
+    return render_template('vossenjacht/create_vossenjacht.html', title="Create New Vossenjacht")
+
+@app.route('/vossenjachten/edit/<int:vj_id>', methods=['GET', 'POST'])
+@login_required
+@moderator_required # Ensures user is at least a moderator
+def edit_vossenjacht_page(vj_id):
+    vossenjacht = get_vossenjacht_or_abort(vj_id, check_owner=True)
+    # vossenjacht is a Row object, convert to dict for easier template use if needed, or access by key
+    vj_dict = dict(vossenjacht)
+
+    if request.method == 'POST':
+        name = request.form.get('name')
+        type = request.form.get('type')
+        status = request.form.get('status')
+        start_time_str = request.form.get('start_time')
+        error = None
+
+        if not name:
+            error = "Name is required."
+        elif type not in ['kilometers', 'time', 'both']:
+            error = "Invalid vossenjacht type."
+        elif status not in ['active', 'completed']:
+            error = "Invalid status."
+        elif not start_time_str:
+            error = "Start time is required."
+        else:
+            try:
+                datetime.strptime(start_time_str, '%H:%M')
+            except ValueError:
+                error = "Invalid start time format. Use HH:MM."
+
+        if error:
+            # Pass current form values back to template, by updating vj_dict with form values before re-rendering
+            vj_dict_for_form = vj_dict.copy() # Avoid modifying the original dict from GET
+            vj_dict_for_form['name'] = name
+            vj_dict_for_form['type'] = type
+            vj_dict_for_form['status'] = status
+            vj_dict_for_form['start_time'] = start_time_str
+            return render_template('vossenjacht/edit_vossenjacht.html', error=error, vossenjacht=vj_dict_for_form, title=f"Edit {vj_dict_for_form['name']}")
+
+        db = get_db()
+        try:
+            db.execute(
+                'UPDATE vossenjachten SET name = ?, type = ?, status = ?, start_time = ? WHERE id = ?',
+                (name, type, status, start_time_str, vj_id)
+            )
+            db.commit()
+            # flash('Vossenjacht updated successfully!', 'success')
+            return redirect(url_for('list_vossenjachten_page'))
+        except sqlite3.Error as e:
+            error = f"Database error: {e}"
+            # Pass current form values back on DB error too
+            vj_dict_for_form = vj_dict.copy()
+            vj_dict_for_form['name'] = name
+            vj_dict_for_form['type'] = type
+            vj_dict_for_form['status'] = status
+            vj_dict_for_form['start_time'] = start_time_str
+            return render_template('vossenjacht/edit_vossenjacht.html', error=error, vossenjacht=vj_dict_for_form, title=f"Edit {vj_dict_for_form['name']}")
+
+    # GET request
+    return render_template('vossenjacht/edit_vossenjacht.html', vossenjacht=vj_dict, title=f"Edit {vj_dict['name']}")
+
+@app.route('/vossenjachten/delete/<int:vj_id>', methods=['POST'])
+@login_required
+@moderator_required # Ensures user is at least a moderator
+def delete_vossenjacht_page(vj_id):
+    # get_vossenjacht_or_abort will handle 404 and basic permission for moderators
+    get_vossenjacht_or_abort(vj_id, check_owner=True)
+
+    db = get_db()
+    try:
+        # For now, we accept orphaned entries. Future: check for entries or use CASCADE.
+        db.execute('DELETE FROM vossenjachten WHERE id = ?', (vj_id,))
+        db.commit()
+        # flash('Vossenjacht deleted successfully.', 'success')
+    except sqlite3.Error as e:
+        # Log error
+        # flash(f'Error deleting vossenjacht: {e}', 'danger')
+        pass # Fall through to redirect
+    return redirect(url_for('list_vossenjachten_page'))
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8080)

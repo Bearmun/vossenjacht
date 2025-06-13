@@ -6,7 +6,34 @@ def initialize_database():
         conn = sqlite3.connect('foxhunt.db')
         cursor = conn.cursor()
 
-        # Create table if it doesn't exist
+        # Enable foreign key support
+        cursor.execute("PRAGMA foreign_keys = ON;")
+
+        # Define users table
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL CHECK (role IN ('admin', 'moderator'))
+        )
+        ''')
+
+        # Define vossenjachten table
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS vossenjachten (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            creation_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            creator_id INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'completed')),
+            type TEXT NOT NULL CHECK (type IN ('kilometers', 'time', 'both')),
+            start_time TEXT, -- New column
+            FOREIGN KEY (creator_id) REFERENCES users (id)
+        )
+        ''')
+
+        # Modify entries table
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS entries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -15,11 +42,15 @@ def initialize_database():
             end_km REAL NOT NULL,
             arrival_time_last_fox TEXT NOT NULL,
             calculated_km REAL NOT NULL,
-            duration_minutes INTEGER NOT NULL
+            duration_minutes INTEGER NOT NULL,
+            vossenjacht_id INTEGER,
+            user_id INTEGER,
+            FOREIGN KEY (vossenjacht_id) REFERENCES vossenjachten (id),
+            FOREIGN KEY (user_id) REFERENCES users (id)
         )
         ''')
         conn.commit()
-        print("Database 'foxhunt.db' initialized successfully with 'entries' table.")
+        print("Database 'foxhunt.db' initialized successfully with 'users', 'vossenjachten', and 'entries' tables.")
     except sqlite3.Error as e:
         print(f"Database initialization error: {e}")
     finally:

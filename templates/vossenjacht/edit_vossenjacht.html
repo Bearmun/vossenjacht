@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Vossenjacht - Vreetvos Foxhunt</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
+        header { background-color: #333; color: #fff; padding: 10px 0; text-align: center; }
+        nav a { margin: 0 10px; color: #fff; text-decoration: none; }
+        .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); max-width: 500px; margin: 20px auto; }
+        h2 { color: #333; text-align: center; }
+        form { display: flex; flex-direction: column; }
+        label { margin-bottom: 5px; font-weight: bold; }
+        input[type="text"], select {
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        input[type="submit"] {
+            padding: 10px 15px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        input[type="submit"]:hover { background-color: #0056b3; }
+        .error { color: red; margin-bottom: 15px; text-align: center; }
+        .nav-links { margin-top: 20px; text-align: center; }
+        .nav-links a { margin: 0 15px; text-decoration: none; color: #007bff; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Vreetvos Foxhunt Admin</h1>
+        <nav>
+            <a href="{{ url_for('results') }}">Main Results</a>
+            {% if session.role == 'admin' %}
+            <a href="{{ url_for('manage_users_page') }}">Manage Users</a>
+            {% endif %}
+            <a href="{{ url_for('list_vossenjachten_page') }}">Manage Vossenjachten</a>
+            <a href="{{ url_for('input_form') }}">Input Entry</a>
+            <a href="{{ url_for('settings') }}">Settings/Edit Entries</a>
+        </nav>
+    </header>
+
+    <div class="container">
+        <h2>Edit Vossenjacht: {{ vossenjacht.name }}</h2>
+
+        {% if error %}
+            <p class="error">{{ error }}</p>
+        {% endif %}
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <p class="error category-{{ category }}">{{ message }}</p>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('edit_vossenjacht_page', vj_id=vossenjacht.id) }}">
+            <label for="name">Vossenjacht Name:</label>
+            <input type="text" id="name" name="name" value="{{ request.form.name if request.form.name else vossenjacht.name }}" required>
+
+            <label for="type">Type:</label>
+            <select id="type" name="type">
+                {% set current_type = request.form.type if request.form.type else vossenjacht.type %}
+                <option value="kilometers" {% if current_type == 'kilometers' %}selected{% endif %}>Kilometers</option>
+                <option value="time" {% if current_type == 'time' %}selected{% endif %}>Time</option>
+                <option value="both" {% if current_type == 'both' %}selected{% endif %}>Both (Kilometers and Time)</option>
+            </select>
+
+            <label for="status">Status:</label>
+            <select id="status" name="status">
+                {% set current_status = request.form.status if request.form.status else vossenjacht.status %}
+                <option value="active" {% if current_status == 'active' %}selected{% endif %}>Active</option>
+                <option value="completed" {% if current_status == 'completed' %}selected{% endif %}>Completed</option>
+            </select>
+
+            <label for="start_time">Starttijd (UU:MM):</label>
+            <input type="time" id="start_time" name="start_time" value="{{ vj_dict.start_time if vj_dict and vj_dict.start_time else '' }}" required>
+
+            <input type="submit" value="Update Vossenjacht">
+        </form>
+        <div class="nav-links">
+            <a href="{{ url_for('list_vossenjachten_page') }}">Cancel (Back to List)</a>
+        </div>
+    </div>
+</body>
+</html>
