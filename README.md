@@ -2,99 +2,163 @@
 
 A simple web application built with Flask to track statistics for a fox hunt.
 Participants can enter their name, start/end kilometer readings, and arrival time.
-The application calculates driven kilometers, total duration from a 12:00 PM start,
+The application calculates driven kilometers, hunt duration,
 and displays sorted results. Data is stored in an SQLite database.
 
 The application is primarily in Dutch.
 
 ## Features
 
-*   Web interface for data entry and viewing results.
-*   Calculation of driven kilometers, including odometer rollover (assumes max 1000km per rollover).
-*   Calculation of hunt duration in minutes from a 12:00 PM start time.
-*   Results sorted by kilometers driven (ascending), then by duration (ascending).
-*   User interface in Dutch.
+*   Web interface for data entry, viewing results, and administration.
+*   **Multi-user system** with 'admin' and 'moderator' roles:
+    *   Secure login system for all users.
+    *   Admins can manage users (add/delete users, assign roles).
+    *   Initial admin user can be created via environment variables (`INITIAL_ADMIN_USERNAME`, `INITIAL_ADMIN_PASSWORD`).
+*   **Vossenjacht (Fox Hunt Event) Management**:
+    *   Admins and moderators can create, edit, and delete Vossenjachten.
+    *   Each Vossenjacht has attributes:
+        *   Name
+        *   Type: 'kilometers' (sort by km), 'time' (sort by duration), or 'both' (sort by km, then duration).
+        *   Status: 'active' or 'completed'.
+        *   Specific start time (e.g., "13:00"), crucial for duration calculations.
+    *   Moderators can only manage Vossenjachten they created.
+*   **Entry Management**:
+    *   Entries are linked to specific Vossenjachten.
+    *   Calculation of driven kilometers, including odometer rollover (assumes max 1000km per rollover).
+    *   **Calculation of hunt duration** in minutes, based on the selected Vossenjacht's specific start time.
+    *   Admins have full access to edit/delete any entry.
+    *   Moderators can edit/delete entries associated with Vossenjachten they manage.
+*   **Results Display**:
+    *   Results can be filtered to show entries for a specific Vossenjacht.
+    *   **Results sorting is dynamic**:
+        *   If a Vossenjacht is selected, sorting respects its 'type' (kilometers, time, or both).
+        *   Global view (all entries) sorts by kilometers then duration by default.
+*   User interface primarily in Dutch.
 *   Persistent data storage using SQLite (`foxhunt.db`).
-*   Basic password protection for data entry forms.
-*   A password-protected "Instellingen" (Settings) page for data management, including:
-    *   Listing all entries with options to edit or delete individual entries.
-    *   Functionality to clear the entire database (with strong confirmation).
+*   The "Instellingen" (Settings) page is dedicated to managing entries, with permissions based on user roles (see dedicated section below).
+*   Separate sections for managing Users and Vossenjachten.
 
 ## Configuration
 
-The application can be configured using environment variables.
+The application can be configured using environment variables. These are the primary variables you might need to set:
 
 *   **`FLASK_SECRET_KEY`**:
-    *   **Purpose**: A secret key used by Flask to sign session cookies for security. This is crucial for the login functionality.
-    *   **Default**: A randomly generated value (not suitable for production if instances are restarted often, as sessions would invalidate).
+    *   **Purpose**: A secret key used by Flask to sign session cookies for security, crucial for the login and session management functionality.
+    *   **Default**: A randomly generated value via `os.urandom(24)` if not set (note: this means sessions will invalidate if the application restarts, making it unsuitable for production).
     *   **Recommendation**: Set a strong, persistent random string in your production environment.
     *   Example: `export FLASK_SECRET_KEY='your_very_strong_random_secret_string'`
 
-*   **`VREETVOS_ADMIN_PASSWORD`**:
-    *   **Purpose**: The password used to log in to access the data entry forms.
-    *   **Default**: `vreetvos_admin` (Change this for any real deployment!)
-    *   **Recommendation**: Set a strong password in your production environment.
-    *   Example: `export VREETVOS_ADMIN_PASSWORD='your_secure_admin_password'`
-
 *   **`DATABASE_PATH`**:
-    *   **Purpose**: Specifies the full path to the SQLite database file within the container.
-    *   **Default (in Dockerfile)**: `/data/foxhunt.db`
-    *   **Default (local `app.py`)**: `foxhunt.db`
-    *   **Note**: When running with Docker/Docker Compose, this path inside the container is mapped to a host directory or Docker volume for persistence.
+    *   **Purpose**: Specifies the full path to the SQLite database file.
+    *   **Default (local `app.py`)**: `foxhunt.db` (in the current working directory).
+    *   **Default (in Dockerfile)**: `/data/foxhunt.db` (when running inside the Docker container).
+    *   **Note**: When running with Docker/Docker Compose, this path inside the container is typically mapped to a host directory or Docker volume for data persistence.
 
 *   **`TZ`**:
-    *   **Purpose**: Sets the timezone for the Docker container and thus for the application running inside it. This affects how current time is determined (e.g., for pre-filling forms).
+    *   **Purpose**: Sets the timezone for the application environment (e.g., Docker container). This affects how current time is determined by the application (e.g., for pre-filling form fields or logging timestamps).
     *   **Default (in Dockerfile)**: `Europe/Amsterdam`
-    *   **Recommendation**: If you are in a different timezone, you can override this when running the container.
+    *   **Recommendation**: If you are in a different timezone, override this when running the container or on your host system.
     *   Example (in `.env` for Docker Compose): `TZ=America/New_York`
     *   Example (with `docker run`): `-e TZ="America/New_York"`
+
+*   **`INITIAL_ADMIN_USERNAME`**:
+    *   **Purpose**: Used to create an initial administrator account if no admin users exist in the database on startup.
+    *   **Details**: See the "Initial Admin User Setup" section for more information.
+    *   **Recommendation**: Set this along with `INITIAL_ADMIN_PASSWORD` for the first run, then consider unsetting or securing these variables.
+
+*   **`INITIAL_ADMIN_PASSWORD`**:
+    *   **Purpose**: The password for the initial administrator account created if no admin users exist.
+    *   **Details**: See the "Initial Admin User Setup" section for more information.
+    *   **Recommendation**: Choose a strong password. Set this along with `INITIAL_ADMIN_USERNAME` for the first run, then consider unsetting or securing these variables.
+
+*   **`MAX_ODOMETER_READING`**:
+    *   **Purpose**: Defines the maximum value on the vehicle's odometer before it rolls over (e.g., from 999km back to 0km). This is used to correctly calculate driven kilometers if a rollover occurs during a hunt.
+    *   **Default**: `1000` (as set in `app.py`).
+    *   **Recommendation**: Adjust if your odometers have a different rollover point (e.g., `100000` for a car that rolls over at 99,999.9 km). The value should be an integer.
+
+### Obsolete Variables
+
+*   **`VREETVOS_ADMIN_PASSWORD`**:
+    *   **Status**: No longer used.
+    *   **Reason**: The application has been updated to a multi-user system with username/password authentication for different roles (admin, moderator). The initial admin user is now configured using `INITIAL_ADMIN_USERNAME` and `INITIAL_ADMIN_PASSWORD` as described in the "Initial Admin User Setup" section. This variable can be safely removed from your environment.
+
+### Development/Local Run Environment Variables
+
+When running the Flask application directly (e.g., via `flask run` or `python app.py`) without Docker, the following standard Flask environment variables are useful:
+
+*   **`FLASK_APP`**:
+    *   **Purpose**: Tells Flask where your application instance is.
+    *   **Value**: Should be set to `app.py` (or just `app` if your file is `app.py`).
+    *   Example: `export FLASK_APP=app.py`
+    *   **Note**: This is mentioned in the "Setup and Running" section.
+
+*   **`FLASK_RUN_HOST`**:
+    *   **Purpose**: Specifies the host IP address the Flask development server should bind to.
+    *   **Default**: `127.0.0.1` (localhost, only accessible from your own machine).
+    *   **Recommendation**: Set to `0.0.0.0` to make the server accessible from other devices on your network (e.g., `flask run --host=0.0.0.0`).
+    *   Example: `export FLASK_RUN_HOST=0.0.0.0`
+
+*   **`FLASK_RUN_PORT`**:
+    *   **Purpose**: Specifies the port the Flask development server should listen on.
+    *   **Default**: `5000`.
+    *   **Recommendation**: The "Setup and Running" section uses `8080` (e.g., `flask run --port=8080`).
+    *   Example: `export FLASK_RUN_PORT=8080`
 
 **Setting Environment Variables for Docker/Docker Compose:**
 
 *   **With `docker run`:**
-    Use the `-e` flag for each variable:
+    Use the `-e` flag for each variable. Note that `VREETVOS_ADMIN_PASSWORD` is no longer needed.
     ```sh
     docker run -d -p 8080:8080 \
       -e FLASK_SECRET_KEY='your_very_strong_random_secret_string' \
-      -e VREETVOS_ADMIN_PASSWORD='your_secure_admin_password' \
+      -e INITIAL_ADMIN_USERNAME='admin' \
+      -e INITIAL_ADMIN_PASSWORD='your_secure_password' \
+      -e DATABASE_PATH='/data/foxhunt.db' \
+      -e TZ='Europe/Amsterdam' \
       -v $(pwd)/vreetvos_data:/data \
       --name vreetvos-container ghcr.io/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME:latest
     ```
 
 *   **With `docker-compose.yml`:**
-    You can create an `.env` file in the same directory as your `docker-compose.yml` file with the following content:
+    You can create an `.env` file in the same directory as your `docker-compose.yml` file. Note that `VREETVOS_ADMIN_PASSWORD` should be removed.
+    Example `.env` file content:
     ```env
     FLASK_SECRET_KEY=your_very_strong_random_secret_string
-    VREETVOS_ADMIN_PASSWORD=your_secure_admin_password
-    # DATABASE_PATH is already set in the Dockerfile ENV, so not typically needed here
-    # unless you want to override the default for a specific compose setup.
+    INITIAL_ADMIN_USERNAME=admin
+    INITIAL_ADMIN_PASSWORD=your_secure_password
+    DATABASE_PATH=/data/foxhunt.db
+    TZ=Europe/Amsterdam
+    # MAX_ODOMETER_READING=1000 (optional, if default is fine)
     ```
     Docker Compose will automatically pick up variables from an `.env` file.
-    Alternatively, you can add an `environment` section directly in `docker-compose.yml` (less secure for secrets if committed):
+    Alternatively, you can add or update an `environment` section directly in `docker-compose.yml` (less secure for secrets if committed):
     ```yaml
     services:
       vreetvos-app:
         # ... other config ...
         environment:
-          - FLASK_SECRET_KEY=your_very_strong_random_secret_string
-          - VREETVOS_ADMIN_PASSWORD=your_secure_admin_password
+          - FLASK_SECRET_KEY=${FLASK_SECRET_KEY} # Example of referencing from .env
+          - INITIAL_ADMIN_USERNAME=${INITIAL_ADMIN_USERNAME}
+          - INITIAL_ADMIN_PASSWORD=${INITIAL_ADMIN_PASSWORD}
+          - DATABASE_PATH=/data/foxhunt.db
+          - TZ=${TZ:-Europe/Amsterdam} # Use TZ from .env or default
+          # - MAX_ODOMETER_READING=${MAX_ODOMETER_READING:-1000}
     ```
 
 ## Initial Admin User Setup
 
-If no admin user exists in the database when the application starts for the first time (or after the database is initialized), it can automatically create an initial admin user using the following environment variables:
-
--   `INITIAL_ADMIN_USERNAME`: Set this to the desired username for the initial admin.
--   `INITIAL_ADMIN_PASSWORD`: Set this to the desired password for the initial admin.
+If no admin user exists in the database when the application starts for the first time (or after the database is initialized), it can automatically create an initial admin user. This process is controlled by the `INITIAL_ADMIN_USERNAME` and `INITIAL_ADMIN_PASSWORD` environment variables, as listed in the main "Configuration" section.
 
 Set these environment variables before running the application for the first time (e.g., in your `.env` file for Docker Compose, or directly in your environment for local execution).
 
-The application will print messages to the console (or logs) indicating the status of this process:
-- If an admin user already exists.
-- If the admin user is created successfully.
-- If the environment variables are not set and no admin user exists.
+The application will output messages to the console (or application logs) indicating:
+- If an admin user already exists (in which case, no new user is created).
+- If the initial admin user is created successfully using the provided environment variables.
+- If the environment variables are not set and no admin user exists (in this scenario, you would need to set the variables and restart, or find an alternative way to create a user if the application structure allowed, though currently it does not provide a UI for this without being logged in).
 
-It's recommended to unset or secure these variables after the first successful startup and admin user creation, especially in production environments. If these variables are not set and no admin exists, you will need to create an admin user manually via the `/admin/users/add` page after logging in with another admin/moderator, or by other means if no users exist at all.
+**Important Security Note:** It's strongly recommended to unset or remove these `INITIAL_ADMIN_USERNAME` and `INITIAL_ADMIN_PASSWORD` environment variables from your configuration after the first successful startup and admin user creation, especially in production environments. Leaving them set could pose a security risk if the database were to be reset or if an attacker gained access to the environment variables.
+
+If these variables are not set and no admin user exists (e.g., on a subsequent run after they've been cleared), you will need to log in with an existing admin or moderator account to manage users or create new ones via the `/admin/users/add` page. If no users exist at all and the initial admin variables are not set, you'll be unable to log in to create users.
 
 ## Setup and Running
 
@@ -132,22 +196,29 @@ It's recommended to unset or secure these variables after the first successful s
 
 ## Instellingen (Settings Page)
 
-The application includes a password-protected settings page accessible at `/settings` for managing hunt entries. You must be logged in to access this page.
+The application includes a settings page accessible at `/settings` once logged in. This page is **primarily focused on managing individual hunt entries**. Management of Vossenjachten and Users is handled in separate, dedicated sections of the application.
 
-From the settings page, you can:
+Access and capabilities on the Settings page depend on user roles:
 
-*   **View all entries:** A comprehensive list of all submitted fox hunt results is displayed.
-*   **Edit an entry:** Each entry has an "Bewerk" (Edit) option, allowing you to modify its details (name, kilometer readings, arrival time). Changes will automatically recalculate driven kilometers and duration.
-*   **Delete an entry:** Each entry has a "Verwijder" (Delete) option. A confirmation prompt will appear before the entry is permanently removed.
-*   **Clear Entire Database:**
+*   **Viewing Entries:**
+    *   **Admins** can view all entries from all Vossenjachten.
+    *   **Moderators** can view entries associated with Vossenjachten they created/manage.
+*   **Editing an Entry:**
+    *   Each listed entry has an "Bewerk" (Edit) option.
+    *   **Admins** can edit any entry.
+    *   **Moderators** can edit entries belonging to Vossenjachten they manage.
+    *   Changes will automatically recalculate driven kilometers and duration (using the Vossenjacht's start time).
+*   **Deleting an Entry:**
+    *   Each listed entry has a "Verwijder" (Delete) option with a confirmation prompt.
+    *   **Admins** can delete any entry.
+    *   **Moderators** can delete entries belonging to Vossenjachten they manage.
+*   **Clear All Entries (Database Beheer):**
     *   A section under "Database Beheer" (Database Management) allows for the deletion of ALL entries from the database.
-    *   **Warning:** This action is irreversible and permanently deletes all data.
-    *   To prevent accidental data loss, you must:
-        1.  Confirm via a browser pop-up dialog.
-        2.  Type the exact phrase "VERWIJDER ALLES" into a confirmation text box.
-    *   Only proceed if you are absolutely certain you want to erase all records.
+    *   **Warning:** This action is irreversible and permanently deletes all entry data.
+    *   To prevent accidental data loss, strict confirmation is required (typing "VERWIJDER ALLES").
+    *   This function is typically restricted to users with higher privileges (e.g., admins).
 
-All administrative actions on the settings page require you to be logged in.
+All actions on the settings page require an active login session. User and Vossenjacht management have their own interfaces and permissions.
 
 ## Running with Docker
 
@@ -231,32 +302,41 @@ For easier local development and management, a `docker-compose.yml` file is prov
     *   Docker Compose installed.
 
 2.  **Configuration (Important!):**
-    *   The `docker-compose.yml` file is configured to use an image from GHCR: `image: ghcr.io/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME:latest`.
-        *   **You MUST replace `YOUR_GITHUB_USERNAME` and `YOUR_REPO_NAME` in the `docker-compose.yml` file with your actual GitHub username (or organization) and repository name.**
-        *   Similarly, replace these placeholders in any `docker pull` commands mentioned.
-    *   The `docker-compose.yml` file also includes an `environment:` section that sets default or placeholder values for:
-        *   `TZ: "Europe/Amsterdam"`
-        *   `FLASK_SECRET_KEY: "your_very_strong_and_unique_secret_key_here_please_change_me"`
-        *   `VREETVOS_ADMIN_PASSWORD: "vreetvos_admin"`
-        *   `DATABASE_PATH: "/data/foxhunt.db"`
+    *   **Image Source**: The `docker-compose.yml` file is configured to use a pre-built image from GitHub Container Registry (GHCR). The line looks like:
+        `image: ghcr.io/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME:latest`
+        *   **CRITICAL STEP:** You **MUST** replace `YOUR_GITHUB_USERNAME` and `YOUR_REPO_NAME` in this line within your `docker-compose.yml` file with your actual GitHub username (or organization name) and the name of this repository. Failure to do so will result in Docker Compose being unable to pull the image.
+        *   This same placeholder replacement applies to any standalone `docker pull ghcr.io/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME:latest` commands mentioned in this guide.
+    *   **Environment Variables**: The `docker-compose.yml` file includes an `environment:` section. It is highly recommended to manage the values for these variables using an `.env` file for better security and flexibility, especially for secrets.
+        Example `environment` section in `docker-compose.yml` designed to pick up values from an `.env` file:
+        ```yaml
+        environment:
+          - TZ=${TZ:-Europe/Amsterdam}
+          - FLASK_SECRET_KEY=${FLASK_SECRET_KEY}
+          - INITIAL_ADMIN_USERNAME=${INITIAL_ADMIN_USERNAME}
+          - INITIAL_ADMIN_PASSWORD=${INITIAL_ADMIN_PASSWORD}
+          - DATABASE_PATH=${DATABASE_PATH:-/data/foxhunt.db}
+          - MAX_ODOMETER_READING=${MAX_ODOMETER_READING:-1000}
+        ```
     *   **Security Warning:**
-        *   The default values for `FLASK_SECRET_KEY` and `VREETVOS_ADMIN_PASSWORD` in `docker-compose.yml` are **NOT secure** and **MUST be changed** for any real deployment.
+        *   Default placeholder values for secrets like `FLASK_SECRET_KEY` and `INITIAL_ADMIN_PASSWORD` that might be commented out or present in a template `docker-compose.yml` are **NOT secure** and **MUST be changed** for any real deployment by setting them in your `.env` file or directly if appropriate for your setup.
     *   **Recommended Configuration Method (using an `.env` file):**
         *   For better security, especially for secrets, create a file named `.env` in the same directory as `docker-compose.yml`. Docker Compose automatically loads environment variables from this file.
         *   **Do NOT commit your `.env` file to version control if it contains real secrets.** Add `.env` to your `.gitignore` file.
         *   Example `.env` file content:
             ```env
             FLASK_SECRET_KEY=a_truly_random_and_strong_secret_key_generated_by_you
-            VREETVOS_ADMIN_PASSWORD=your_chosen_strong_admin_password
-            # You can also override TZ or DATABASE_PATH here if needed, e.g.:
-            # TZ=America/New_York
+            INITIAL_ADMIN_USERNAME=admin_user
+            INITIAL_ADMIN_PASSWORD=a_very_secure_password_!@#$
+            DATABASE_PATH=/data/foxhunt.db # Or keep default from compose if suitable
+            TZ=Europe/Amsterdam
+            # MAX_ODOMETER_READING=1000 # Only if different from default
             ```
-        *   Values set in the `.env` file will override those defined directly in the `environment:` section of `docker-compose.yml`.
+        *   Values set in the `.env` file will override any defaults defined directly in the `environment:` section of `docker-compose.yml` if the compose file is set up to reference them (e.g., `FLASK_SECRET_KEY=${FLASK_SECRET_KEY}`).
 
 3.  **Pull the Latest Image (Recommended):**
     *   Before starting the services, it's good practice to pull the latest image from GHCR:
         `docker pull ghcr.io/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME:latest`
-        *(Remember to replace placeholders!)*
+        *(Remember to replace the `YOUR_GITHUB_USERNAME` and `YOUR_REPO_NAME` placeholders!)*
 
 4.  **Run the Application:**
     *   Open your terminal in the project root directory (where `docker-compose.yml` is located).
