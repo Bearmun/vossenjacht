@@ -10,8 +10,10 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from app import app, get_db, init_db # Import get_db, init_db
 # from flask import g # g is not typically used directly in tests this way
-
-from werkzeug.security import generate_password_hash # Added for user creation
+# import os # Already imported in the original file, ensure it's available
+from unittest.mock import patch # For os.environ mocking
+from werkzeug.security import generate_password_hash, check_password_hash # Ensure check_password_hash is here
+from app import create_initial_admin_user # Import the function to be tested
 
 class FoxHuntTrackerDBTests(unittest.TestCase):
 
@@ -889,7 +891,7 @@ class FoxHuntTrackerDBTests(unittest.TestCase):
     # test_21_clear_database_functionality: ensure only admin can clear
     def test_21_clear_database_functionality_admin_only(self):
         admin_id = db.execute("SELECT id FROM users WHERE username = 'testadmin'").fetchone()['id']
-        admin_id = db.execute("SELECT id FROM users WHERE username = 'testadmin'").fetchone()['id']
+        # admin_id = db.execute("SELECT id FROM users WHERE username = 'testadmin'").fetchone()['id'] # Removed duplicate
         mod_id = db.execute("SELECT id FROM users WHERE username = 'testmod'").fetchone()['id']
         vj_id = self._create_vossenjacht("ClearTestVJ", "kilometers", admin_id)
         self._create_entry("Entry To Clear", 0, 1, "12:00", vj_id, mod_id)
@@ -916,6 +918,62 @@ class FoxHuntTrackerDBTests(unittest.TestCase):
             self.assertEqual(response_admin_clear.status_code, 200)
             self.assertIsNone(db.execute("SELECT id FROM entries WHERE name = 'Entry To Clear'").fetchone(), "DB NOT cleared by admin.")
         self.logout()
+
+
+    def test_22_initial_admin_creation_success(self): # Renumbered to follow existing tests
+        db = get_db()
+        # Remove users created by parent setUp to simulate a truly fresh DB for this test
+        db.execute("DELETE FROM users WHERE username = 'testadmin'")
+        db.execute("DELETE FROM users WHERE username = 'testmod'")
+        db.commit()
+
+        with patch.dict(os.environ, {'INITIAL_ADMIN_USERNAME': 'envadmin', 'INITIAL_ADMIN_PASSWORD': 'envpass'}):
+            create_initial_admin_user() # Call the function directly
+
+        admin_user = db.execute("SELECT * FROM users WHERE username = ?", ('envadmin',)).fetchone()
+        self.assertIsNotNone(admin_user, "Admin user 'envadmin' was not created.")
+        self.assertEqual(admin_user['role'], 'admin')
+        self.assertTrue(check_password_hash(admin_user['password_hash'], 'envpass'))
+
+    def test_23_initial_admin_creation_admin_exists(self):
+        db = get_db()
+        # 'testadmin' created in FoxHuntTrackerDBTests.setUp serves as the existing admin
+        # It has role 'admin' as per setUp.
+
+        with patch.dict(os.environ, {'INITIAL_ADMIN_USERNAME': 'newenvadmin', 'INITIAL_ADMIN_PASSWORD': 'newenvpass'}):
+            create_initial_admin_user() # Attempt to create another admin
+
+        new_admin_user = db.execute("SELECT * FROM users WHERE username = ?", ('newenvadmin',)).fetchone()
+        self.assertIsNone(new_admin_user, "New admin 'newenvadmin' should not have been created if one already exists.")
+
+        existing_admin = db.execute("SELECT * FROM users WHERE username = ?", ('testadmin',)).fetchone()
+        self.assertIsNotNone(existing_admin, "Original admin 'testadmin' should still be present.")
+        self.assertEqual(existing_admin['role'], 'admin')
+
+        admin_count = db.execute("SELECT COUNT(id) FROM users WHERE role = ?", ('admin',)).fetchone()[0]
+        self.assertEqual(admin_count, 1, "There should only be one admin user after attempting to create another.")
+
+    def test_24_initial_admin_creation_env_vars_missing(self):
+        db = get_db()
+        # Remove users created by parent setUp
+        db.execute("DELETE FROM users WHERE username = 'testadmin'")
+        db.execute("DELETE FROM users WHERE username = 'testmod'")
+        db.commit()
+
+        # Ensure relevant env vars are not present for this test
+        # We patch them to be missing from os.environ for the duration of this context
+        with patch.dict(os.environ, {}, clear=True):
+            # If 'INITIAL_ADMIN_USERNAME' or 'INITIAL_ADMIN_PASSWORD' were already in os.environ from the actual environment,
+            # this clear=True ensures they are gone for this test.
+            # Alternatively, selectively delete them if known:
+            # current_environ = os.environ.copy()
+            # if 'INITIAL_ADMIN_USERNAME' in current_environ: del current_environ['INITIAL_ADMIN_USERNAME']
+            # if 'INITIAL_ADMIN_PASSWORD' in current_environ: del current_environ['INITIAL_ADMIN_PASSWORD']
+            # with patch.dict(os.environ, current_environ, clear=True):
+            create_initial_admin_user()
+
+        admin_users = db.execute("SELECT * FROM users WHERE role = ?", ('admin',)).fetchall()
+        self.assertEqual(len(admin_users), 0, "No admin user should be created if environment variables are missing.")
 
 
 if __name__ == '__main__':

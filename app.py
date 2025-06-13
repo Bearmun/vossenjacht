@@ -676,6 +676,32 @@ def edit_vossenjacht_page(vj_id):
     # GET request
     return render_template('vossenjacht/edit_vossenjacht.html', vossenjacht=vj_dict, title=f"Edit {vj_dict['name']}")
 
+def create_initial_admin_user():
+    db = get_db()
+    try:
+        admin_user = db.execute("SELECT id FROM users WHERE role = ?", ('admin',)).fetchone()
+        if admin_user:
+            print("Admin user already exists.") # Or use app.logger if configured
+            return
+
+        initial_username = os.environ.get('INITIAL_ADMIN_USERNAME')
+        initial_password = os.environ.get('INITIAL_ADMIN_PASSWORD')
+
+        if initial_username and initial_password:
+            hashed_password = generate_password_hash(initial_password)
+            db.execute(
+                "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+                (initial_username, hashed_password, 'admin')
+            )
+            db.commit()
+            print(f"Initial admin user '{initial_username}' created successfully.") # Or use app.logger
+        else:
+            print("No admin user found. INITIAL_ADMIN_USERNAME and/or INITIAL_ADMIN_PASSWORD environment variables not set. Admin user needs to be created manually or by setting these variables.") # Or use app.logger
+    except sqlite3.Error as e:
+        print(f"Database error during initial admin user creation: {e}") # Or use app.logger
+    # No explicit db.close() here as it's handled by teardown_appcontext
+
+
 @app.route('/vossenjachten/delete/<int:vj_id>', methods=['POST'])
 @login_required
 @moderator_required # Ensures user is at least a moderator
@@ -696,4 +722,16 @@ def delete_vossenjacht_page(vj_id):
     return redirect(url_for('list_vossenjachten_page'))
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=8080)
+    # Ensure create_initial_admin_user is called when running directly,
+    # for PaaS environments like Docker, this might be called after init_app as well.
+    # For development, it's fine here. For production, consider placement carefully.
+    with app.app_context():
+        init_db() # Ensure DB is initialized before trying to create admin
+        create_initial_admin_user()
+    app.run(debug=True, host='0.0.0.0', port=8080) # debug=False for production
+else:
+    # This block is for when 'flask run' is used or when imported by a WSGI server.
+    # It's generally a good place for such one-time startup tasks.
+    with app.app_context():
+        # init_db() # Usually, init-db command is preferred over auto-init on startup for production
+        create_initial_admin_user()
