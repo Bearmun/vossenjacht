@@ -80,6 +80,22 @@ The application can be configured using environment variables.
           - VREETVOS_ADMIN_PASSWORD=your_secure_admin_password
     ```
 
+## Initial Admin User Setup
+
+If no admin user exists in the database when the application starts for the first time (or after the database is initialized), it can automatically create an initial admin user using the following environment variables:
+
+-   `INITIAL_ADMIN_USERNAME`: Set this to the desired username for the initial admin.
+-   `INITIAL_ADMIN_PASSWORD`: Set this to the desired password for the initial admin.
+
+Set these environment variables before running the application for the first time (e.g., in your `.env` file for Docker Compose, or directly in your environment for local execution).
+
+The application will print messages to the console (or logs) indicating the status of this process:
+- If an admin user already exists.
+- If the admin user is created successfully.
+- If the environment variables are not set and no admin user exists.
+
+It's recommended to unset or secure these variables after the first successful startup and admin user creation, especially in production environments. If these variables are not set and no admin exists, you will need to create an admin user manually via the `/admin/users/add` page after logging in with another admin/moderator, or by other means if no users exist at all.
+
 ## Setup and Running
 
 1.  **Prerequisites:**
