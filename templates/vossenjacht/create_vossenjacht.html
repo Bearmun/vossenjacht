@@ -74,6 +74,9 @@
                 <option value="both" {% if type == 'both' %}selected{% endif %}>Both (Kilometers and Time)</option>
             </select>
 
+            <label for="start_time">Starttijd (UU:MM):</label>
+            <input type="time" id="start_time" name="start_time" value="{{ start_time if start_time else '' }}" required>
+
             <input type="submit" value="Create Vossenjacht">
         </form>
         <div class="nav-links">

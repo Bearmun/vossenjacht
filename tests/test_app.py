@@ -65,10 +65,10 @@ class FoxHuntTrackerDBTests(unittest.TestCase):
         db.commit()
         return user_id
 
-    def _create_vossenjacht(self, name, type, creator_id):
+    def _create_vossenjacht(self, name, type, creator_id, start_time='12:00'): # Added start_time, defaults to 12:00 for existing tests
         db = get_db()
-        vj_id = db.execute("INSERT INTO vossenjachten (name, type, creator_id) VALUES (?, ?, ?)",
-                         (name, type, creator_id)).lastrowid
+        vj_id = db.execute("INSERT INTO vossenjachten (name, type, creator_id, start_time) VALUES (?, ?, ?, ?)",
+                         (name, type, creator_id, start_time)).lastrowid
         db.commit()
         return vj_id
 

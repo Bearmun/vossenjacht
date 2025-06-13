@@ -28,6 +28,7 @@ def initialize_database():
             creator_id INTEGER NOT NULL,
             status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'completed')),
             type TEXT NOT NULL CHECK (type IN ('kilometers', 'time', 'both')),
+            start_time TEXT, -- New column
             FOREIGN KEY (creator_id) REFERENCES users (id)
         )
         ''')

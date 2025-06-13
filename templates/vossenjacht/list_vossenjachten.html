@@ -63,6 +63,7 @@
                         <th>Creator</th>
                         <th>Type</th>
                         <th>Status</th>
+                        <th>Starttijd</th>
                         <th>Creation Date</th>
                         <th>Actions</th>
                     </tr>
@@ -74,6 +75,7 @@
                         <td>{{ vj.creator_username }}</td>
                         <td>{{ vj.type | capitalize }}</td>
                         <td>{{ vj.status | capitalize }}</td>
+                        <td>{{ vj.start_time if vj.start_time else 'N/A' }}</td>
                         <td>{{ vj.creation_date.strftime('%Y-%m-%d %H:%M') if vj.creation_date else 'N/A' }}</td>
                         <td class="actions">
                             {% if session.role == 'admin' or (session.role == 'moderator' and vj.creator_id == session.user_id) %}

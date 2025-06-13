@@ -49,6 +49,7 @@ def init_db():
             creator_id INTEGER NOT NULL,
             status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'completed')),
             type TEXT NOT NULL CHECK (type IN ('kilometers', 'time', 'both')),
+            start_time TEXT, -- New column
             FOREIGN KEY (creator_id) REFERENCES users (id)
         );
 
@@ -181,10 +182,15 @@ def add_entry():
             return redirect(url_for('input_form')) # Or return error string
 
         # Fetch and check vossenjacht status
-        vossenjacht = get_vossenjacht_or_abort(vossenjacht_id, check_owner=False)
-        if vossenjacht['status'] != 'active':
+        vossenjacht_for_entry = get_vossenjacht_or_abort(vossenjacht_id, check_owner=False) # Renamed to avoid conflict with 'vossenjacht' from edit route context
+        if vossenjacht_for_entry['status'] != 'active':
             # flash('Selected vossenjacht is not active.', 'danger')
             return "Error: Selected Vossenjacht is not active. <a href='/input'>Try again</a>"
+
+        if not vossenjacht_for_entry['start_time']:
+            # flash('Selected vossenjacht does not have a configured start time.', 'danger')
+            # return redirect(url_for('input_form'))
+            return "Error: Selected Vossenjacht does not have a start time. <a href='/input'>Try again</a>"
 
         max_odom_reading = int(current_app.config.get('MAX_ODOMETER_READING', 1000))
         actual_end_km = end_km
@@ -197,9 +203,10 @@ def add_entry():
             print(f"Warning: Negative calculated_km for {name}. Start: {start_km}, End: {end_km}. Adjusted End: {actual_end_km}")
             return redirect(url_for('input_form'))
 
+        # Use Vossenjacht's specific start_time for duration calculation
         arrival_dt = datetime.strptime(arrival_time_str, '%H:%M')
-        start_dt = datetime.strptime('12:00', '%H:%M') # Assuming fixed start time for duration calculation
-        duration_delta = arrival_dt - start_dt
+        vj_start_time_dt = datetime.strptime(vossenjacht_for_entry['start_time'], '%H:%M')
+        duration_delta = arrival_dt - vj_start_time_dt
         duration_minutes = int(duration_delta.total_seconds() / 60)
 
         user_id = session['user_id']
@@ -575,29 +582,37 @@ def create_vossenjacht_page():
     if request.method == 'POST':
         name = request.form.get('name')
         type = request.form.get('type')
+        start_time_str = request.form.get('start_time')
         error = None
 
         if not name:
             error = "Name is required."
         elif type not in ['kilometers', 'time', 'both']:
             error = "Invalid vossenjacht type specified."
+        elif not start_time_str:
+            error = "Start time is required."
+        else:
+            try:
+                datetime.strptime(start_time_str, '%H:%M')
+            except ValueError:
+                error = "Invalid start time format. Use HH:MM."
 
         if error:
-            return render_template('vossenjacht/create_vossenjacht.html', error=error, name=name, type=type, title="Create Vossenjacht")
+            return render_template('vossenjacht/create_vossenjacht.html', error=error, name=name, type=type, start_time=start_time_str, title="Create Vossenjacht")
 
         creator_id = session['user_id']
         db = get_db()
         try:
             db.execute(
-                'INSERT INTO vossenjachten (name, type, creator_id) VALUES (?, ?, ?)',
-                (name, type, creator_id)
+                'INSERT INTO vossenjachten (name, type, creator_id, start_time) VALUES (?, ?, ?, ?)',
+                (name, type, creator_id, start_time_str)
             )
             db.commit()
             # flash('Vossenjacht created successfully!', 'success')
             return redirect(url_for('list_vossenjachten_page'))
         except sqlite3.Error as e:
             error = f"Database error: {e}"
-            return render_template('vossenjacht/create_vossenjacht.html', error=error, name=name, type=type, title="Create Vossenjacht")
+            return render_template('vossenjacht/create_vossenjacht.html', error=error, name=name, type=type, start_time=start_time_str, title="Create Vossenjacht")
     # GET request
     return render_template('vossenjacht/create_vossenjacht.html', title="Create New Vossenjacht")
 
@@ -613,6 +628,7 @@ def edit_vossenjacht_page(vj_id):
         name = request.form.get('name')
         type = request.form.get('type')
         status = request.form.get('status')
+        start_time_str = request.form.get('start_time')
         error = None
 
         if not name:
@@ -621,23 +637,41 @@ def edit_vossenjacht_page(vj_id):
             error = "Invalid vossenjacht type."
         elif status not in ['active', 'completed']:
             error = "Invalid status."
+        elif not start_time_str:
+            error = "Start time is required."
+        else:
+            try:
+                datetime.strptime(start_time_str, '%H:%M')
+            except ValueError:
+                error = "Invalid start time format. Use HH:MM."
 
         if error:
-            # Pass current form values back to template, along with original vossenjacht for ID
-            return render_template('vossenjacht/edit_vossenjacht.html', error=error, vossenjacht=vj_dict, title=f"Edit {vj_dict['name']}")
+            # Pass current form values back to template, by updating vj_dict with form values before re-rendering
+            vj_dict_for_form = vj_dict.copy() # Avoid modifying the original dict from GET
+            vj_dict_for_form['name'] = name
+            vj_dict_for_form['type'] = type
+            vj_dict_for_form['status'] = status
+            vj_dict_for_form['start_time'] = start_time_str
+            return render_template('vossenjacht/edit_vossenjacht.html', error=error, vossenjacht=vj_dict_for_form, title=f"Edit {vj_dict_for_form['name']}")
 
         db = get_db()
         try:
             db.execute(
-                'UPDATE vossenjachten SET name = ?, type = ?, status = ? WHERE id = ?',
-                (name, type, status, vj_id)
+                'UPDATE vossenjachten SET name = ?, type = ?, status = ?, start_time = ? WHERE id = ?',
+                (name, type, status, start_time_str, vj_id)
             )
             db.commit()
             # flash('Vossenjacht updated successfully!', 'success')
             return redirect(url_for('list_vossenjachten_page'))
         except sqlite3.Error as e:
             error = f"Database error: {e}"
-            return render_template('vossenjacht/edit_vossenjacht.html', error=error, vossenjacht=vj_dict, title=f"Edit {vj_dict['name']}")
+            # Pass current form values back on DB error too
+            vj_dict_for_form = vj_dict.copy()
+            vj_dict_for_form['name'] = name
+            vj_dict_for_form['type'] = type
+            vj_dict_for_form['status'] = status
+            vj_dict_for_form['start_time'] = start_time_str
+            return render_template('vossenjacht/edit_vossenjacht.html', error=error, vossenjacht=vj_dict_for_form, title=f"Edit {vj_dict_for_form['name']}")
 
     # GET request
     return render_template('vossenjacht/edit_vossenjacht.html', vossenjacht=vj_dict, title=f"Edit {vj_dict['name']}")

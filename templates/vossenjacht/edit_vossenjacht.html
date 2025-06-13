@@ -82,6 +82,9 @@
                 <option value="completed" {% if current_status == 'completed' %}selected{% endif %}>Completed</option>
             </select>
 
+            <label for="start_time">Starttijd (UU:MM):</label>
+            <input type="time" id="start_time" name="start_time" value="{{ vj_dict.start_time if vj_dict and vj_dict.start_time else '' }}" required>
+
             <input type="submit" value="Update Vossenjacht">
         </form>
         <div class="nav-links">
